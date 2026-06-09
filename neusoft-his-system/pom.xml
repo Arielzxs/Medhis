@@ -6,7 +6,7 @@
 
     <groupId>com.neusoft</groupId>
     <artifactId>medical-imaging-system</artifactId>
-    <version>${revision}</version>
+    <version>1.0.0.0</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -28,8 +28,6 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <revision>1.0.0.0</revision>
-
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <jjwt.version>0.12.5</jjwt.version>
@@ -57,7 +55,7 @@
             </dependency>
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt</artifactId>
+                <artifactId>jjwt-api</artifactId>
                 <version>${jjwt.version}</version>
             </dependency>
             <dependency>
