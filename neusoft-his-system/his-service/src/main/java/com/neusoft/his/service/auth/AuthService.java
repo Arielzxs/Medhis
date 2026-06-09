@@ -23,9 +23,9 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final AuditService auditService;
 
-    public AuthService(AuditService auditService) {
+    public AuthService(AuditService auditService, JwtTokenProvider tokenProvider) {
         this.auditService = auditService;
-        this.tokenProvider = new JwtTokenProvider("12345678901234567890123456789012", 24 * 3600);
+        this.tokenProvider = tokenProvider;
         SysUser admin = new SysUser();
         admin.setId(id.getAndIncrement());
         admin.setUsername("admin");

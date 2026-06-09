@@ -1,9 +1,0 @@
-com/neusoft/his/service/pharmacy/PharmacyService.class
-com/neusoft/his/service/dto/LoginResponse.class
-com/neusoft/his/service/finance/FinanceService.class
-com/neusoft/his/service/analytics/AnalyticsService.class
-com/neusoft/his/service/dto/AuthRequest.class
-com/neusoft/his/service/dto/PatientRegistrationRequest.class
-com/neusoft/his/service/doctor/DoctorWorkstationService.class
-com/neusoft/his/service/auth/AuthService.class
-com/neusoft/his/service/patient/PatientService.class

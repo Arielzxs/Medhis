@@ -95,6 +95,6 @@ public class DoctorWorkstationService {
     }
 
     public List<Prescription> listPrescriptions() {
-        return records.isEmpty() ? prescriptions.values().stream().toList() : prescriptions.values().stream().toList();
+        return prescriptions.values().stream().toList();
     }
 }
