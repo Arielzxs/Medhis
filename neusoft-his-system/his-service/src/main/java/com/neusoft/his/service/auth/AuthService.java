@@ -1,75 +1,110 @@
 package com.neusoft.his.service.auth;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.common.security.JwtTokenProvider;
 import com.neusoft.his.common.security.RoleCode;
 import com.neusoft.his.dal.entity.SysUser;
+import com.neusoft.his.dal.entity.SysUserRole;
+import com.neusoft.his.dal.mapper.SysUserMapper;
+import com.neusoft.his.dal.mapper.SysUserRoleMapper;
 import com.neusoft.his.service.dto.AuthRequest;
 import com.neusoft.his.service.dto.LoginResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @Service
 public class AuthService {
-    private final Map<String, SysUser> users = new ConcurrentHashMap<>();
-    private final Map<Long, Set<String>> userRoles = new ConcurrentHashMap<>();
-    private final AtomicLong id = new AtomicLong(1);
+    private final SysUserMapper sysUserMapper;
+    private final SysUserRoleMapper sysUserRoleMapper;
     private final JwtTokenProvider tokenProvider;
     private final AuditService auditService;
     private final PasswordEncoder passwordEncoder;
 
-    public AuthService(AuditService auditService, JwtTokenProvider tokenProvider, PasswordEncoder passwordEncoder) {
+    public AuthService(SysUserMapper sysUserMapper, SysUserRoleMapper sysUserRoleMapper,
+                       AuditService auditService, JwtTokenProvider tokenProvider, PasswordEncoder passwordEncoder) {
+        this.sysUserMapper = sysUserMapper;
+        this.sysUserRoleMapper = sysUserRoleMapper;
         this.auditService = auditService;
         this.tokenProvider = tokenProvider;
         this.passwordEncoder = passwordEncoder;
-        SysUser admin = new SysUser();
-        admin.setId(id.getAndIncrement());
-        admin.setUsername("admin");
-        admin.setPassword(passwordEncoder.encode("admin123"));
-        admin.setName("系统管理员");
-        admin.setEnabled("Y");
-        admin.setCreatedAt(LocalDateTime.now());
-        users.put(admin.getUsername(), admin);
-        userRoles.put(admin.getId(), Set.of(RoleCode.ADMIN));
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Long register(AuthRequest req) {
-        if (users.containsKey(req.username())) {
+        QueryWrapper<SysUser> query = new QueryWrapper<>();
+        query.eq("username", req.username());
+        if (sysUserMapper.selectCount(query) > 0) {
             throw new BizException("用户名已存在");
         }
+
         SysUser user = new SysUser();
-        user.setId(id.getAndIncrement());
         user.setUsername(req.username());
         user.setPassword(passwordEncoder.encode(req.password()));
         user.setName(req.name());
         user.setEnabled("Y");
         user.setCreatedAt(LocalDateTime.now());
-        users.put(user.getUsername(), user);
-        userRoles.put(user.getId(), Set.of(RoleCode.REGISTRAR));
+        sysUserMapper.insert(user);
+
         auditService.log("REGISTER", "新用户注册: " + user.getUsername());
         return user.getId();
     }
 
     public LoginResponse login(AuthRequest req) {
-        SysUser user = users.get(req.username());
+        QueryWrapper<SysUser> query = new QueryWrapper<>();
+        query.eq("username", req.username());
+        SysUser user = sysUserMapper.selectOne(query);
+
         if (user == null || !passwordEncoder.matches(req.password(), user.getPassword())) {
             throw new BizException("用户名或密码错误");
         }
-        Set<String> roles = userRoles.getOrDefault(user.getId(), Set.of());
+        if (!"Y".equals(user.getEnabled())) {
+            throw new BizException("账户已被禁用");
+        }
+
+        // 真实查询关联的角色表
+        QueryWrapper<SysUserRole> roleQuery = new QueryWrapper<>();
+        roleQuery.eq("user_id", user.getId());
+        Set<String> roles = sysUserRoleMapper.selectList(roleQuery).stream()
+                .map(SysUserRole::getRoleCode)
+                .collect(Collectors.toSet());
+
+        // 临时保障：如果超级管理员还没分配角色，给予默认最大权限
+        if (roles.isEmpty() && "admin".equals(user.getUsername())) {
+            roles = Set.of(RoleCode.ADMIN);
+        }
+
         String token = tokenProvider.generate(user.getId(), user.getUsername(), roles);
         auditService.log("LOGIN", "用户登录: " + user.getUsername());
         return new LoginResponse(token, user.getId(), user.getUsername(), roles);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void assignRoles(Long userId, Set<String> roles) {
-        userRoles.put(userId, roles);
-        auditService.log("ASSIGN_ROLE", "用户ID=" + userId + " 角色=" + roles);
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException("用户不存在");
+        }
+
+        // 先删除该用户原来的所有旧角色
+        QueryWrapper<SysUserRole> deleteWrapper = new QueryWrapper<>();
+        deleteWrapper.eq("user_id", userId);
+        sysUserRoleMapper.delete(deleteWrapper);
+
+        // 插入新的角色集合
+        for (String role : roles) {
+            SysUserRole userRole = new SysUserRole();
+            userRole.setUserId(userId);
+            userRole.setRoleCode(role);
+            sysUserRoleMapper.insert(userRole);
+        }
+
+        auditService.log("ASSIGN_ROLES", "为用户 " + user.getUsername() + " 分配角色: " + roles.toString());
     }
 }

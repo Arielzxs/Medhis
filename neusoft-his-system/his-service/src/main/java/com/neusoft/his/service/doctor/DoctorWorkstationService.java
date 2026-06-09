@@ -1,55 +1,59 @@
 package com.neusoft.his.service.doctor;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.dal.entity.MedicalRecord;
 import com.neusoft.his.dal.entity.Prescription;
+import com.neusoft.his.dal.mapper.DoctorProfileMapper;
+import com.neusoft.his.dal.mapper.MedicalRecordMapper;
+import com.neusoft.his.dal.mapper.PrescriptionMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 @Service
 public class DoctorWorkstationService {
-    private final Map<Long, DoctorProfile> doctors = new ConcurrentHashMap<>();
-    private final Map<Long, MedicalRecord> records = new ConcurrentHashMap<>();
-    private final Map<Long, Prescription> prescriptions = new ConcurrentHashMap<>();
-    private final AtomicLong doctorId = new AtomicLong(1);
-    private final AtomicLong recordId = new AtomicLong(1);
-    private final AtomicLong prescriptionId = new AtomicLong(1);
+    private final DoctorProfileMapper doctorMapper;
+    private final MedicalRecordMapper recordMapper;
+    private final PrescriptionMapper prescriptionMapper;
     private final AuditService auditService;
 
-    public DoctorWorkstationService(AuditService auditService) {
+    public DoctorWorkstationService(DoctorProfileMapper doctorMapper, MedicalRecordMapper recordMapper,
+                                    PrescriptionMapper prescriptionMapper, AuditService auditService) {
+        this.doctorMapper = doctorMapper;
+        this.recordMapper = recordMapper;
+        this.prescriptionMapper = prescriptionMapper;
         this.auditService = auditService;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public DoctorProfile saveDoctor(DoctorProfile doctor) {
         if (doctor.getId() == null) {
-            doctor.setId(doctorId.getAndIncrement());
             doctor.setCreatedAt(LocalDateTime.now());
+            doctorMapper.insert(doctor);
         } else {
             doctor.setUpdatedAt(LocalDateTime.now());
+            doctorMapper.updateById(doctor);
         }
-        doctors.put(doctor.getId(), doctor);
         auditService.log("DOCTOR_SAVE", "医生档案: " + doctor.getName());
         return doctor;
     }
 
     public PageResponse<DoctorProfile> scheduleQuery(String department, long page, long size) {
-        List<DoctorProfile> all = doctors.values().stream()
-                .filter(d -> department == null || department.equals(d.getDepartment()))
-                .sorted(Comparator.comparing(DoctorProfile::getId))
-                .collect(Collectors.toList());
-        int from = (int) Math.min((page - 1) * size, all.size());
-        int to = (int) Math.min(from + size, all.size());
-        return new PageResponse<>(page, size, all.size(), all.subList(from, to));
+        Page<DoctorProfile> pageParam = new Page<>(page, size);
+        QueryWrapper<DoctorProfile> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(department)) {
+            query.eq("department", department);
+        }
+        doctorMapper.selectPage(pageParam, query);
+        return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
     }
 
     public String callPatient(Long patientId) {
@@ -57,44 +61,47 @@ public class DoctorWorkstationService {
         return "请患者" + patientId + "到诊室就诊";
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public MedicalRecord saveRecord(MedicalRecord record) {
         if (record.getId() == null) {
-            record.setId(recordId.getAndIncrement());
             record.setCreatedAt(LocalDateTime.now());
             record.setArchiveFlag("Y");
+            recordMapper.insert(record);
+        } else {
+            record.setUpdatedAt(LocalDateTime.now());
+            recordMapper.updateById(record);
         }
-        records.put(record.getId(), record);
-        auditService.log("MEDICAL_RECORD", "病历=" + record.getId());
+        auditService.log("MEDICAL_RECORD", "病历保存: patient=" + record.getPatientId());
         return record;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public Prescription prescribe(Prescription prescription) {
         if (prescription.getPatientId() == null || prescription.getDoctorId() == null) {
             throw new BizException("处方患者和医生不能为空");
         }
-        prescription.setId(prescriptionId.getAndIncrement());
         prescription.setAuditStatus("PENDING");
         prescription.setPaid("N");
         prescription.setDispenseStatus("WAITING");
         prescription.setCreatedAt(LocalDateTime.now());
-        prescriptions.put(prescription.getId(), prescription);
-        auditService.log("PRESCRIBE", "处方=" + prescription.getId());
+        prescriptionMapper.insert(prescription);
+        auditService.log("PRESCRIBE", "处方开具=" + prescription.getId());
         return prescription;
     }
 
     public List<MedicalRecord> history(Long patientId) {
-        return records.values().stream().filter(r -> patientId.equals(r.getPatientId())).collect(Collectors.toList());
+        QueryWrapper<MedicalRecord> query = new QueryWrapper<>();
+        query.eq("patient_id", patientId).orderByDesc("created_at");
+        return recordMapper.selectList(query);
     }
 
     public Prescription getPrescription(Long id) {
-        Prescription prescription = prescriptions.get(id);
-        if (prescription == null) {
-            throw new BizException("处方不存在");
-        }
+        Prescription prescription = prescriptionMapper.selectById(id);
+        if (prescription == null) throw new BizException("处方不存在");
         return prescription;
     }
 
     public List<Prescription> listPrescriptions() {
-        return prescriptions.values().stream().toList();
+        return prescriptionMapper.selectList(null);
     }
 }

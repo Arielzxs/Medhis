@@ -116,3 +116,18 @@ CREATE TABLE IF NOT EXISTS financial_transaction (
     created_at DATETIME,
     updated_at DATETIME
 );
+-- 用户角色关联表
+CREATE TABLE IF NOT EXISTS sys_user_role (
+    user_id BIGINT NOT NULL,
+    role_code VARCHAR(32) NOT NULL,
+    PRIMARY KEY (user_id, role_code)
+);
+
+-- 系统审计日志持久化表
+CREATE TABLE IF NOT EXISTS sys_audit_log (
+    id BIGINT PRIMARY KEY,
+    time DATETIME,
+    username VARCHAR(64),
+    operation VARCHAR(64),
+    detail TEXT
+);
