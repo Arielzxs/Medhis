@@ -1,4 +1,4 @@
 his:
   security:
-    jwt-secret: ${HIS_JWT_SECRET:7f6f3e7bb9ee4f098233f38a8a2db8e9}
+    jwt-secret: ${HIS_JWT_SECRET:U5vXf9Vx3nQ2rP7mL8sT4wY1aD6kN0hJcB2eR9uM4qZ7tF1pS8yW3vG6xC0nH5j}
     jwt-expire-seconds: ${HIS_JWT_EXPIRE_SECONDS:86400}

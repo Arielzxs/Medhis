@@ -7,6 +7,7 @@ import com.neusoft.his.common.security.RoleCode;
 import com.neusoft.his.dal.entity.SysUser;
 import com.neusoft.his.service.dto.AuthRequest;
 import com.neusoft.his.service.dto.LoginResponse;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -22,14 +23,16 @@ public class AuthService {
     private final AtomicLong id = new AtomicLong(1);
     private final JwtTokenProvider tokenProvider;
     private final AuditService auditService;
+    private final PasswordEncoder passwordEncoder;
 
-    public AuthService(AuditService auditService, JwtTokenProvider tokenProvider) {
+    public AuthService(AuditService auditService, JwtTokenProvider tokenProvider, PasswordEncoder passwordEncoder) {
         this.auditService = auditService;
         this.tokenProvider = tokenProvider;
+        this.passwordEncoder = passwordEncoder;
         SysUser admin = new SysUser();
         admin.setId(id.getAndIncrement());
         admin.setUsername("admin");
-        admin.setPassword("admin123");
+        admin.setPassword(passwordEncoder.encode("admin123"));
         admin.setName("系统管理员");
         admin.setEnabled("Y");
         admin.setCreatedAt(LocalDateTime.now());
@@ -44,7 +47,7 @@ public class AuthService {
         SysUser user = new SysUser();
         user.setId(id.getAndIncrement());
         user.setUsername(req.username());
-        user.setPassword(req.password());
+        user.setPassword(passwordEncoder.encode(req.password()));
         user.setName(req.name());
         user.setEnabled("Y");
         user.setCreatedAt(LocalDateTime.now());
@@ -56,7 +59,7 @@ public class AuthService {
 
     public LoginResponse login(AuthRequest req) {
         SysUser user = users.get(req.username());
-        if (user == null || !user.getPassword().equals(req.password())) {
+        if (user == null || !passwordEncoder.matches(req.password(), user.getPassword())) {
             throw new BizException("用户名或密码错误");
         }
         Set<String> roles = userRoles.getOrDefault(user.getId(), Set.of());
