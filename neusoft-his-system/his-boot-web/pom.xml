@@ -8,9 +8,10 @@
         <groupId>com.neusoft</groupId>
         <artifactId>medical-imaging-system</artifactId>
         <version>1.0.0.0</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>his-service</artifactId>
+    <artifactId>his-boot-web</artifactId>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -21,36 +22,29 @@
     <dependencies>
         <dependency>
             <groupId>com.neusoft</groupId>
-            <artifactId>his-common</artifactId>
+            <artifactId>his-api</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.neusoft</groupId>
-            <artifactId>his-dal</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-
         <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
-
         <dependency>
-            <groupId>com.google.genai</groupId>
-            <artifactId>google-genai</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>

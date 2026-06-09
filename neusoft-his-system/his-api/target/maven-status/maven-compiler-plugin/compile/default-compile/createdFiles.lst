@@ -1,0 +1,8 @@
+com/neusoft/his/api/controller/AuditController.class
+com/neusoft/his/api/controller/FinanceController.class
+com/neusoft/his/api/config/SecurityConfig.class
+com/neusoft/his/api/controller/AuthController.class
+com/neusoft/his/api/controller/PatientController.class
+com/neusoft/his/api/controller/PharmacyController.class
+com/neusoft/his/api/controller/AnalyticsController.class
+com/neusoft/his/api/controller/DoctorController.class
