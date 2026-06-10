@@ -58,4 +58,8 @@ public class DoctorController {
     public ApiResponse<Prescription> prescribe(@RequestBody Prescription prescription) {
         return ApiResponse.ok("处方开具成功", service.prescribe(prescription));
     }
+    @GetMapping("/prescriptions")
+    public ApiResponse<List<Prescription>> getAllPrescriptions() {
+        return ApiResponse.ok(service.listPrescriptions());
+    }
 }
