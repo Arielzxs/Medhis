@@ -1,20 +1,23 @@
 <template>
-  <div class="login-container">
-    <el-card class="login-card">
+  <div class="auth-container">
+    <el-card class="auth-card">
       <template #header>
-        <h2 class="title">HIS 医疗系统登录</h2>
+        <div class="card-header">
+          <h2 class="title">HIS 医疗系统登录</h2>
+        </div>
       </template>
-      <el-form :model="form" :rules="rules" ref="loginFormRef">
+
+      <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef">
         <el-form-item prop="username">
           <el-input
-            v-model="form.username"
+            v-model="loginForm.username"
             placeholder="请输入用户名"
             prefix-icon="User"
           />
         </el-form-item>
         <el-form-item prop="password">
           <el-input
-            v-model="form.password"
+            v-model="loginForm.password"
             type="password"
             placeholder="请输入密码"
             prefix-icon="Lock"
@@ -24,12 +27,19 @@
         <el-form-item>
           <el-button
             type="primary"
-            class="login-btn"
+            class="submit-btn"
             :loading="loading"
             @click="handleLogin"
-            >登 录</el-button
           >
+            登 录
+          </el-button>
         </el-form-item>
+        <div class="toggle-link">
+          <span>没有账号？</span>
+          <el-button type="primary" link @click="goToRegister"
+            >立即注册</el-button
+          >
+        </div>
       </el-form>
     </el-card>
   </div>
@@ -43,12 +53,12 @@ import { ElMessage } from "element-plus";
 
 const router = useRouter();
 const userStore = useUserStore();
-
-const loginFormRef = ref(null);
 const loading = ref(false);
-const form = reactive({ username: "admin", password: "123456" }); // 可以把你的测试账号写在这
+const loginFormRef = ref(null);
 
-const rules = {
+const loginForm = reactive({ username: "admin", password: "123456" });
+
+const loginRules = {
   username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
   password: [{ required: true, message: "请输入密码", trigger: "blur" }],
 };
@@ -58,39 +68,49 @@ const handleLogin = () => {
     if (valid) {
       loading.value = true;
       try {
-        await userStore.login(form);
+        await userStore.login(loginForm);
         ElMessage.success("登录成功");
         router.push("/");
-      } catch (error) {
-        // 请求失败已经在 request.js 拦截器里处理了，这里静默捕捉
       } finally {
         loading.value = false;
       }
     }
   });
 };
+
+const goToRegister = () => {
+  router.push("/register");
+};
 </script>
 
 <style scoped>
-.login-container {
+.auth-container {
   height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
   background-color: #f0f2f5;
 }
-.login-card {
+.auth-card {
   width: 400px;
-  padding: 20px;
+  padding: 10px 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
+.card-header {
+  display: flex;
+  justify-content: center;
+}
 .title {
-  text-align: center;
   margin: 0;
   color: #303133;
 }
-.login-btn {
+.submit-btn {
   width: 100%;
   font-size: 16px;
+}
+.toggle-link {
+  text-align: right;
+  font-size: 13px;
+  color: #606266;
 }
 </style>

@@ -1,13 +1,21 @@
 <template>
   <el-container class="layout-container">
-    <el-aside width="200px" class="aside">
-      <div class="logo">Neusoft HIS</div>
+    <el-aside :width="isCollapse ? '64px' : '220px'" class="aside">
+      <div class="logo">
+        <el-icon v-if="isCollapse" :size="24" color="#fff"
+          ><Platform
+        /></el-icon>
+        <span v-else>东软云医院 HIS</span>
+      </div>
       <el-menu
         router
         :default-active="$route.path"
         background-color="#304156"
         text-color="#bfcbd9"
         active-text-color="#409EFF"
+        :collapse="isCollapse"
+        :collapse-transition="false"
+        class="el-menu-vertical"
       >
         <template v-for="route in menus" :key="route.path">
           <el-menu-item
@@ -15,7 +23,7 @@
             v-if="hasAuth(route.meta.roles)"
           >
             <el-icon><component :is="route.meta.icon" /></el-icon>
-            <span>{{ route.meta.title }}</span>
+            <template #title>{{ route.meta.title }}</template>
           </el-menu-item>
         </template>
       </el-menu>
@@ -23,47 +31,78 @@
 
     <el-container>
       <el-header class="header">
+        <div class="header-left">
+          <el-icon class="collapse-btn" @click="isCollapse = !isCollapse">
+            <Fold v-if="!isCollapse" />
+            <Expand v-else />
+          </el-icon>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
         <div class="header-right">
-          <span>欢迎，{{ userStore.username }}</span>
-          <el-button
-            type="danger"
-            link
-            @click="handleLogout"
-            style="margin-left: 15px"
-            >退出登录</el-button
-          >
+          <el-dropdown @command="handleCommand" trigger="click">
+            <span class="user-dropdown">
+              <el-avatar
+                :size="32"
+                style="background-color: #409eff; margin-right: 8px"
+              >
+                {{ userStore.username.charAt(0).toUpperCase() }}
+              </el-avatar>
+              {{ userStore.username }}
+              <el-icon class="el-icon--right"><arrow-down /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item
+                  divided
+                  command="logout"
+                  style="color: #f56c6c"
+                  >退出登录</el-dropdown-item
+                >
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </el-header>
-      <el-main>
-        <router-view />
+
+      <el-main class="main-content">
+        <router-view v-slot="{ Component }">
+          <transition name="fade-transform" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "../store/user";
 
 const router = useRouter();
 const userStore = useUserStore();
+const isCollapse = ref(false);
 
-// 提取 router 中的子路由作为左侧菜单
 const menus = computed(() => {
   const layoutRoute = router.options.routes.find((r) => r.path === "/");
   return layoutRoute ? layoutRoute.children : [];
 });
 
-// 权限判断函数
 const hasAuth = (roles) => {
   if (!roles) return true;
   return roles.some((role) => userStore.roles.includes(role));
 };
 
-const handleLogout = () => {
-  userStore.logout();
-  router.push("/login");
+const handleCommand = (command) => {
+  if (command === "logout") {
+    userStore.logout();
+    router.push("/login");
+  }
 };
 </script>
 
@@ -73,20 +112,64 @@ const handleLogout = () => {
 }
 .aside {
   background-color: #304156;
+  transition: width 0.3s;
+  overflow-x: hidden;
 }
 .logo {
   height: 60px;
-  line-height: 60px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #fff;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: bold;
+  background-color: #2b3643;
+}
+.el-menu-vertical {
+  border-right: none;
 }
 .header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   background-color: #fff;
   box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  padding: 0 20px;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.collapse-btn {
+  font-size: 20px;
+  cursor: pointer;
+}
+.collapse-btn:hover {
+  color: #409eff;
+}
+.user-dropdown {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  outline: none;
+}
+.main-content {
+  background-color: #f0f2f5;
+  padding: 20px;
+}
+
+/* 页面切换动画 */
+.fade-transform-leave-active,
+.fade-transform-enter-active {
+  transition: all 0.3s;
+}
+.fade-transform-enter-from {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+.fade-transform-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
 }
 </style>

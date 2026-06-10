@@ -8,6 +8,11 @@ const routes = [
     hidden: true,
   },
   {
+    path: "/register",
+    component: () => import("../views/register/index.vue"),
+    hidden: true,
+  },
+  {
     path: "/",
     component: () => import("../layout/index.vue"),
     redirect: "/dashboard",
@@ -26,7 +31,6 @@ const routes = [
           icon: "User",
         },
       },
-      // ---- 下面是新增的三个核心业务模块 ----
       {
         path: "doctor",
         component: () => import("../views/doctor/index.vue"),
@@ -59,14 +63,20 @@ const router = createRouter({
   routes,
 });
 
-// 全局路由守卫（门禁系统）
+// 全局路由守卫（增加了对 /register 的放行检查）
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore();
-  if (to.path === "/login") {
+
+  // 1. 如果去登录或者注册页面，直接放行
+  if (to.path === "/login" || to.path === "/register") {
     next();
-  } else if (!userStore.token) {
+  }
+  // 2. 如果没有 Token，强制去登录页
+  else if (!userStore.token) {
     next("/login");
-  } else {
+  }
+  // 3. 有 Token，进行RBAC角色权限判定
+  else {
     if (
       to.meta.roles &&
       !to.meta.roles.some((r) => userStore.roles.includes(r))
