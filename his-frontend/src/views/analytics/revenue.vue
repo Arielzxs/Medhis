@@ -62,25 +62,36 @@
 import { ref, reactive, onMounted, nextTick } from "vue";
 import { ElMessage } from "element-plus";
 import * as echarts from "echarts";
+import request from "../../utils/request";
 
 const queryParams = reactive({ dateRange: null });
 const lineChartRef = ref(null);
 const pieChartRef = ref(null);
 const tableData = ref([]);
 
+let lineChart;
+let pieChart;
+
 const initCharts = () => {
-  const lineChart = echarts.init(lineChartRef.value);
+  lineChart = echarts.init(lineChartRef.value);
+  pieChart = echarts.init(pieChartRef.value);
+  updateCharts();
+};
+
+const updateCharts = () => {
+  const dates = tableData.value.map((item) => item.date);
+  const netIncome = tableData.value.map((item) => item.netIncome);
   lineChart.setOption({
     title: { text: "近七日门诊营收趋势" },
     tooltip: { trigger: "axis" },
     xAxis: {
       type: "category",
-      data: ["06-15", "06-16", "06-17", "06-18", "06-19", "06-20", "06-21"],
+      data: dates,
     },
     yAxis: { type: "value" },
     series: [
       {
-        data: [12000, 13500, 11000, 14200, 15800, 18000, 14530],
+        data: netIncome,
         type: "line",
         smooth: true,
         areaStyle: { opacity: 0.1 },
@@ -88,7 +99,14 @@ const initCharts = () => {
     ],
   });
 
-  const pieChart = echarts.init(pieChartRef.value);
+  const totalIncome = tableData.value.reduce(
+    (sum, item) => sum + item.totalIncome,
+    0,
+  );
+  const totalRefund = tableData.value.reduce(
+    (sum, item) => sum + item.totalRefund,
+    0,
+  );
   pieChart.setOption({
     title: { text: "营收构成占比", left: "center" },
     tooltip: { trigger: "item" },
@@ -98,9 +116,8 @@ const initCharts = () => {
         type: "pie",
         radius: ["40%", "70%"],
         data: [
-          { value: 8500, name: "处方费" },
-          { value: 4200, name: "检查费" },
-          { value: 1830, name: "挂号费" },
+          { value: totalIncome, name: "收入" },
+          { value: totalRefund, name: "退费" },
         ],
         emphasis: {
           itemStyle: {
@@ -114,27 +131,26 @@ const initCharts = () => {
   });
 };
 
-const handleSearch = () => {
-  tableData.value = [
-    {
-      date: "2026-06-21",
-      totalIncome: 15420.5,
-      totalRefund: 890.0,
-      netIncome: 14530.5,
-    },
-    {
-      date: "2026-06-20",
-      totalIncome: 18500.0,
-      totalRefund: 500.0,
-      netIncome: 18000.0,
-    },
-    {
-      date: "2026-06-19",
-      totalIncome: 16200.0,
-      totalRefund: 400.0,
-      netIncome: 15800.0,
-    },
-  ];
+const handleSearch = async () => {
+  const res = await request.get("/api/finance/reports", {
+    params: { page: 1, size: 500 },
+  });
+  const grouped = new Map();
+  for (const item of res.records || []) {
+    const date = item.createdAt?.slice(0, 10) || "未知日期";
+    if (!grouped.has(date)) {
+      grouped.set(date, { date, totalIncome: 0, totalRefund: 0, netIncome: 0 });
+    }
+    const row = grouped.get(date);
+    const amount = Number(item.amount || 0);
+    if (item.direction === "IN") row.totalIncome += amount;
+    if (item.bizType === "REFUND") row.totalRefund += amount;
+    row.netIncome = row.totalIncome - row.totalRefund;
+  }
+  tableData.value = [...grouped.values()].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  if (lineChart && pieChart) updateCharts();
 };
 
 const exportData = () => {
@@ -142,9 +158,9 @@ const exportData = () => {
 };
 
 onMounted(() => {
-  handleSearch();
-  nextTick(() => {
+  nextTick(async () => {
     initCharts();
+    await handleSearch();
   });
 });
 </script>

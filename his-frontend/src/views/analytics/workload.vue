@@ -63,21 +63,28 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick } from "vue";
 import * as echarts from "echarts";
+import request from "../../utils/request";
 
 const queryParams = reactive({ dateRange: null, department: "" });
 const barChartRef = ref(null);
 const tableData = ref([]);
 
+let myChart;
 const initChart = () => {
-  const myChart = echarts.init(barChartRef.value);
+  myChart = echarts.init(barChartRef.value);
+  updateChart();
+};
+
+const updateChart = () => {
+  const rows = tableData.value.slice(0, 5);
   myChart.setOption({
     title: { text: "医生接诊工作量排行 (Top 5)", left: "center" },
     tooltip: { trigger: "axis" },
-    xAxis: { type: "category", data: ["王鹏", "孙芳", "李静", "赵强", "周游"] },
+    xAxis: { type: "category", data: rows.map((item) => item.doctorName) },
     yAxis: { type: "value", name: "接诊人次" },
     series: [
       {
-        data: [120, 98, 85, 76, 60],
+        data: rows.map((item) => item.patientCount),
         type: "bar",
         barWidth: "40%",
         itemStyle: { color: "#409EFF", borderRadius: [4, 4, 0, 0] },
@@ -86,40 +93,23 @@ const initChart = () => {
   });
 };
 
-const handleSearch = () => {
-  // 模拟数据刷新
-  tableData.value = [
-    {
-      department: "心血管内科",
-      doctorName: "王鹏",
-      patientCount: 120,
-      prescriptionCount: 110,
-    },
-    {
-      department: "儿科",
-      doctorName: "孙芳",
-      patientCount: 98,
-      prescriptionCount: 80,
-    },
-    {
-      department: "消化内科",
-      doctorName: "李静",
-      patientCount: 85,
-      prescriptionCount: 75,
-    },
-    {
-      department: "普外科",
-      doctorName: "赵强",
-      patientCount: 76,
-      prescriptionCount: 60,
-    },
-  ];
+const handleSearch = async () => {
+  const workload = await request.get("/api/analytics/doctor-workload");
+  tableData.value = Object.entries(workload || {})
+    .map(([doctorName, count]) => ({
+      department: queryParams.department || "--",
+      doctorName,
+      patientCount: count,
+      prescriptionCount: 0,
+    }))
+    .sort((a, b) => b.patientCount - a.patientCount);
+  if (myChart) updateChart();
 };
 
 onMounted(() => {
-  handleSearch();
-  nextTick(() => {
+  nextTick(async () => {
     initChart();
+    await handleSearch();
   });
 });
 </script>

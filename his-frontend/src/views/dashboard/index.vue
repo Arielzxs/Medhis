@@ -52,7 +52,7 @@
       <el-col :span="6">
         <el-card shadow="hover" class="data-card border-blue">
           <div class="data-title">今日挂号人次</div>
-          <div class="data-value">342<span>人</span></div>
+          <div class="data-value">{{ stats.todayRegistrations }}<span>人</span></div>
           <div class="data-trend">
             较昨日
             <span class="up"
@@ -64,7 +64,7 @@
       <el-col :span="6">
         <el-card shadow="hover" class="data-card border-orange">
           <div class="data-title">当前候诊人数</div>
-          <div class="data-value">45<span>人</span></div>
+          <div class="data-value">{{ stats.waitingPatients }}<span>人</span></div>
           <div class="data-trend">
             较昨日
             <span class="down"
@@ -76,7 +76,7 @@
       <el-col :span="6">
         <el-card shadow="hover" class="data-card border-green">
           <div class="data-title">今日门诊收入</div>
-          <div class="data-value money">¥125,860.50</div>
+          <div class="data-value money">¥{{ stats.todayIncome.toFixed(2) }}</div>
           <div class="data-trend">
             较昨日
             <span class="up"
@@ -88,7 +88,7 @@
       <el-col :span="6">
         <el-card shadow="hover" class="data-card border-red">
           <div class="data-title">库存预警药品</div>
-          <div class="data-value">12<span>种</span></div>
+          <div class="data-value">{{ stats.stockWarnings }}<span>种</span></div>
           <div class="data-trend">
             较昨日
             <span class="down"
@@ -150,73 +150,75 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, reactive, onMounted, computed } from "vue";
 import { useUserStore } from "../../store/user";
 import request from "../../utils/request";
 
 const userStore = useUserStore();
 const loading = ref(false);
+const stats = reactive({
+  todayRegistrations: 0,
+  waitingPatients: 0,
+  todayIncome: 0,
+  stockWarnings: 0,
+});
 
 const currentDate = computed(() => {
   const d = new Date();
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 });
 
-// 模拟待办任务数据
-const tasks = ref([
-  {
-    name: "内科门诊处方退费审核 (张三)",
-    time: "10:30",
-    status: "待处理",
-    type: "danger",
-  },
-  {
-    name: "药房日常库存盘点",
-    time: "14:00",
-    status: "进行中",
-    type: "warning",
-  },
-  {
-    name: "心血管内科排班计划确认",
-    time: "16:00",
-    status: "未开始",
-    type: "info",
-  },
-  {
-    name: "阿莫西林胶囊采购入库审核",
-    time: "昨天",
-    status: "已完成",
-    type: "success",
-  },
-]);
-
-// 模拟系统日志数据
-const logs = ref([
-  {
-    content: "系统成功执行每日数据备份",
-    time: "2026-06-11 02:00",
-    type: "success",
-    color: "#67c23a",
-  },
-  {
-    content: "系统管理员 张翔硕 登录系统",
-    time: "2026-06-11 08:30",
-    type: "primary",
-    color: "#409eff",
-  },
-  {
-    content: "药房模块触发低库存预警提醒",
-    time: "2026-06-11 09:15",
-    type: "warning",
-    color: "#e6a23c",
-  },
-]);
+const tasks = ref([]);
+const logs = ref([]);
 
 const fetchDashboardData = async () => {
   loading.value = true;
   try {
-    // 实际项目中可以向后端请求真实的仪表盘数据
-    await request.get("/api/analytics/dashboard");
+    const [dashboard, registrations, warnings, reports, auditLogs] =
+      await Promise.all([
+        request.get("/api/analytics/dashboard"),
+        request.get("/api/patients/registrations", {
+          params: { page: 1, size: 200 },
+        }),
+        request.get("/api/pharmacy/inventory/warnings"),
+        request.get("/api/finance/reports", { params: { page: 1, size: 200 } }),
+        request.get("/api/audit/logs"),
+      ]);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const regRecords = registrations.records || [];
+    stats.todayRegistrations = regRecords.filter((item) =>
+      item.createdAt?.startsWith(today),
+    ).length;
+    stats.waitingPatients = regRecords.filter((item) =>
+      ["待缴费", "待诊", "待诊中"].includes(item.status),
+    ).length;
+    stats.todayIncome = (reports.records || [])
+      .filter((item) => item.direction === "IN" && item.createdAt?.startsWith(today))
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    stats.stockWarnings = warnings.length || 0;
+
+    tasks.value = [
+      ...(warnings || []).slice(0, 3).map((drug) => ({
+        name: `${drug.name} 库存低于预警线`,
+        time: drug.updatedAt || drug.createdAt || "刚刚",
+        status: "待处理",
+        type: "warning",
+      })),
+      {
+        name: `审计日志累计 ${dashboard.auditLogCount || 0} 条`,
+        time: "实时",
+        status: "进行中",
+        type: "info",
+      },
+    ];
+
+    logs.value = (auditLogs || []).slice(0, 5).map((log) => ({
+      content: `${log.operation || "系统操作"}：${log.detail || ""}`,
+      time: log.time,
+      type: "primary",
+      color: "#409eff",
+    }));
   } catch (error) {
     console.error(error);
   } finally {

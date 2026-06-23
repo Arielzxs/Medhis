@@ -2,18 +2,15 @@
 <project version="4">
   <component name="CompilerConfiguration">
     <annotationProcessing>
-<<<<<<< HEAD
       <profile default="true" name="Default" enabled="true" />
-=======
->>>>>>> 47f8a69 (a)
       <profile name="Maven default annotation processors profile" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="his-common" />
         <module name="his-api" />
-        <module name="his-dal" />
+        <module name="his-common" />
         <module name="his-boot-web" />
+        <module name="his-dal" />
         <module name="his-service" />
       </profile>
     </annotationProcessing>

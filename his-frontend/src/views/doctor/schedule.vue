@@ -109,6 +109,7 @@
 <script setup>
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage } from "element-plus";
+import request from "../../utils/request";
 
 const loading = ref(false);
 const queryParams = reactive({
@@ -119,53 +120,33 @@ const queryParams = reactive({
 
 const tableData = ref([]);
 
-const fetchSchedules = () => {
+const fetchSchedules = async () => {
   loading.value = true;
-  setTimeout(() => {
-    tableData.value = [
-      {
-        id: 1,
-        scheduleDate: "2026-06-11",
-        shift: "上午",
-        department: "心血管内科",
-        doctorName: "王鹏",
-        level: "专家号",
-        limit: 30,
-        status: 1,
-      },
-      {
-        id: 2,
-        scheduleDate: "2026-06-11",
-        shift: "下午",
-        department: "儿科",
-        doctorName: "孙芳",
-        level: "普通号",
+  try {
+    const res = await request.get("/api/doctors/schedules", {
+      params: { department: queryParams.department, page: 1, size: 100 },
+    });
+    const scheduleDate =
+      queryParams.date instanceof Date
+        ? queryParams.date.toISOString().slice(0, 10)
+        : queryParams.date || new Date().toISOString().slice(0, 10);
+    tableData.value = (res.records || [])
+      .filter((doctor) =>
+        queryParams.doctorName ? doctor.name?.includes(queryParams.doctorName) : true,
+      )
+      .map((doctor) => ({
+        id: doctor.id,
+        scheduleDate,
+        shift: doctor.attendanceStatus || "全天",
+        department: doctor.department,
+        doctorName: doctor.name,
+        level: doctor.title?.includes("主任") ? "专家号" : "普通号",
         limit: 50,
-        status: 1,
-      },
-      {
-        id: 3,
-        scheduleDate: "2026-06-12",
-        shift: "上午",
-        department: "消化内科",
-        doctorName: "李静",
-        level: "专家号",
-        limit: 25,
-        status: 0,
-      },
-      {
-        id: 4,
-        scheduleDate: "2026-06-12",
-        shift: "下午",
-        department: "普外科",
-        doctorName: "赵强",
-        level: "普通号",
-        limit: 40,
-        status: 1,
-      },
-    ];
+        status: doctor.attendanceStatus === "停诊" ? 0 : 1,
+      }));
+  } finally {
     loading.value = false;
-  }, 400);
+  }
 };
 
 const handleSearch = () => {

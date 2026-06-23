@@ -45,6 +45,15 @@ public class PatientController {
         return ApiResponse.ok("挂号成功", patientService.register(req));
     }
 
+    @GetMapping("/registrations")
+    @RequireRoles({RoleCode.REGISTRAR, RoleCode.DOCTOR, RoleCode.FINANCE, RoleCode.ADMIN})
+    public ApiResponse<PageResponse<java.util.Map<String, Object>>> registrations(@RequestParam(required = false) Long id,
+                                                                                  @RequestParam(required = false) String status,
+                                                                                  @RequestParam(defaultValue = "1") long page,
+                                                                                  @RequestParam(defaultValue = "10") long size) {
+        return ApiResponse.ok(patientService.registrations(id, status, page, size));
+    }
+
     @PostMapping("/registrations/{id}/cancel")
     @RequireRoles({RoleCode.REGISTRAR, RoleCode.ADMIN})
     public ApiResponse<Void> cancel(@PathVariable Long id) {

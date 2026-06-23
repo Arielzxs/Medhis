@@ -352,6 +352,7 @@
 <script setup>
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import request from "../../utils/request";
 
 // Tab 控制
 const activeTab = ref("charge");
@@ -364,44 +365,47 @@ const chargeDialogVisible = ref(false);
 const currentBill = ref(null);
 const chargeForm = reactive({ settlementType: "自费", payChannel: "微信" });
 
-const fetchPendingBills = () => {
+const billTypeText = (type) => {
+  const map = {
+    REGISTRATION: "挂号费",
+    PRESCRIPTION: "处方费",
+    CHECK: "检查费",
+  };
+  return map[type] || type || "费用";
+};
+
+const mapBill = (bill) => ({
+  id: bill.id,
+  billNo: `BL${bill.id}`,
+  patientName: `患者#${bill.patientId}`,
+  billType: billTypeText(bill.billingType),
+  department: "--",
+  doctorName: "--",
+  amount: Number(bill.amount || 0),
+  createTime: bill.createdAt || "",
+  payChannel: bill.payChannel || "--",
+  payTime: bill.updatedAt || bill.createdAt || "",
+});
+
+const fetchPendingBills = async () => {
   loadingCharge.value = true;
-  // 模拟接口请求
-  setTimeout(() => {
-    pendingBills.value = [
-      {
-        id: 1,
-        billNo: "BL260621001",
-        patientName: "李建国",
-        billType: "处方费",
-        department: "心血管内科",
-        doctorName: "王鹏",
-        amount: 156.5,
-        createTime: "2026-06-21 09:30:12",
-      },
-      {
-        id: 2,
-        billNo: "BL260621002",
-        patientName: "王芳",
-        billType: "挂号费",
-        department: "儿科",
-        doctorName: "孙芳",
-        amount: 20.0,
-        createTime: "2026-06-21 10:15:00",
-      },
-      {
-        id: 3,
-        billNo: "BL260621003",
-        patientName: "赵小明",
-        billType: "检查费",
-        department: "普外科",
-        doctorName: "赵强",
-        amount: 320.0,
-        createTime: "2026-06-21 11:05:45",
-      },
-    ];
+  try {
+    const res = await request.get("/api/finance/bills", {
+      params: { status: "PRICED", page: 1, size: 100 },
+    });
+    pendingBills.value = (res.records || []).map(mapBill).filter((bill) => {
+      const patientMatched = chargeQuery.patientNo
+        ? bill.patientName.includes(chargeQuery.patientNo) ||
+          bill.billNo.includes(chargeQuery.patientNo)
+        : true;
+      const nameMatched = chargeQuery.patientName
+        ? bill.patientName.includes(chargeQuery.patientName)
+        : true;
+      return patientMatched && nameMatched;
+    });
+  } finally {
     loadingCharge.value = false;
-  }, 400);
+  }
 };
 
 const resetChargeQuery = () => {
@@ -417,7 +421,13 @@ const openChargeDialog = (row) => {
   chargeDialogVisible.value = true;
 };
 
-const submitCharge = () => {
+const submitCharge = async () => {
+  await request.post(`/api/finance/bills/${currentBill.value.id}/charge`, null, {
+    params: {
+      channel: chargeForm.payChannel,
+      settlementType: chargeForm.settlementType,
+    },
+  });
   ElMessage.success(
     `单据 ${currentBill.value.billNo} 收款成功！金额 ¥${currentBill.value.amount.toFixed(2)}`,
   );
@@ -433,31 +443,24 @@ const refundDialogVisible = ref(false);
 const currentRefundBill = ref(null);
 const refundForm = reactive({ reason: "" });
 
-const fetchPaidBills = () => {
+const fetchPaidBills = async () => {
   loadingRefund.value = true;
-  setTimeout(() => {
-    paidBills.value = [
-      {
-        id: 101,
-        billNo: "SETTLE26062001",
-        patientName: "张伟",
-        billType: "处方费",
-        amount: 89.0,
-        payChannel: "微信",
-        payTime: "2026-06-20 14:20:00",
-      },
-      {
-        id: 102,
-        billNo: "SETTLE26062002",
-        patientName: "刘强",
-        billType: "检查费",
-        amount: 450.0,
-        payChannel: "支付宝",
-        payTime: "2026-06-20 15:45:12",
-      },
-    ];
+  try {
+    const res = await request.get("/api/finance/bills", {
+      params: { status: "PAID", page: 1, size: 100 },
+    });
+    paidBills.value = (res.records || []).map(mapBill).filter((bill) => {
+      const billMatched = refundQuery.billNo
+        ? bill.billNo.includes(refundQuery.billNo)
+        : true;
+      const nameMatched = refundQuery.patientName
+        ? bill.patientName.includes(refundQuery.patientName)
+        : true;
+      return billMatched && nameMatched;
+    });
+  } finally {
     loadingRefund.value = false;
-  }, 400);
+  }
 };
 
 const openRefundDialog = (row) => {
@@ -466,10 +469,13 @@ const openRefundDialog = (row) => {
   refundDialogVisible.value = true;
 };
 
-const submitRefund = () => {
+const submitRefund = async () => {
   if (!refundForm.reason) {
     return ElMessage.warning("请输入退费事由");
   }
+  await request.post(`/api/finance/bills/${currentRefundBill.value.id}/refund`, null, {
+    params: { reason: refundForm.reason },
+  });
   ElMessage.success(
     `单据 ${currentRefundBill.value.billNo} 已成功退费并生成流水！`,
   );
@@ -481,11 +487,23 @@ const submitRefund = () => {
 const dailyDate = ref(new Date());
 const dailyStats = reactive({ totalIncome: 0, totalRefund: 0, netIncome: 0 });
 
-const fetchDailyStats = () => {
-  // 模拟统计数据生成
-  dailyStats.totalIncome = 15420.5;
-  dailyStats.totalRefund = 890.0;
-  dailyStats.netIncome = 14530.5;
+const fetchDailyStats = async () => {
+  const res = await request.get("/api/finance/reports", {
+    params: { page: 1, size: 500 },
+  });
+  const date = dailyDate.value instanceof Date
+    ? dailyDate.value.toISOString().slice(0, 10)
+    : "";
+  const records = (res.records || []).filter((item) =>
+    date ? item.createdAt?.startsWith(date) : true,
+  );
+  dailyStats.totalIncome = records
+    .filter((item) => item.direction === "IN")
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  dailyStats.totalRefund = records
+    .filter((item) => item.bizType === "REFUND")
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  dailyStats.netIncome = dailyStats.totalIncome - dailyStats.totalRefund;
   ElMessage.success("报表生成成功");
 };
 
@@ -500,7 +518,9 @@ const executeDailyReconcile = () => {
     },
   )
     .then(() => {
-      ElMessage.success("日结对账执行成功，账目已锁定。");
+      request.post("/api/finance/reconcile/daily").then((message) => {
+        ElMessage.success(message || "日结对账执行成功，账目已锁定。");
+      });
     })
     .catch(() => {});
 };

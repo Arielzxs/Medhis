@@ -8,10 +8,7 @@
         <groupId>com.neusoft</groupId>
         <artifactId>medical-imaging-system</artifactId>
         <version>1.0.0.0</version>
-<<<<<<< HEAD
         <relativePath>../pom.xml</relativePath>
-=======
->>>>>>> 47f8a69 (a)
     </parent>
 
     <artifactId>his-service</artifactId>

@@ -149,6 +149,17 @@ public class FinanceService {
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
     }
 
+    public PageResponse<BillingRecord> bills(String status, long page, long size) {
+        Page<BillingRecord> pageParam = new Page<>(page, size);
+        QueryWrapper<BillingRecord> query = new QueryWrapper<>();
+        if (status != null && !status.isBlank()) {
+            query.eq("status", status);
+        }
+        query.orderByDesc("created_at");
+        billingMapper.selectPage(pageParam, query);
+        return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public void markPrescriptionPaid(Long prescriptionId) {
         Prescription p = prescriptionMapper.selectById(prescriptionId);

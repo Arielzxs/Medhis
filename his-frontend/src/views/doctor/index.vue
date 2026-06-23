@@ -89,9 +89,7 @@
                   label="挂号单号"
                   label-class-name="desc-label"
                   content-class-name="desc-content"
-                  >{{
-                    activePatient.regNo || "REG260611001"
-                  }}</el-descriptions-item
+                  >{{ activePatient.regNo || "--" }}</el-descriptions-item
                 >
               </el-descriptions>
             </div>
@@ -177,30 +175,32 @@ const recordForm = reactive({
 
 const fetchQueue = async () => {
   try {
-    // 采用原型假数据填充以展示效果
+    const [waiting, waitingLegacy] = await Promise.all([
+      request.get("/api/patients/registrations", {
+        params: { status: "待诊", page: 1, size: 100 },
+      }),
+      request.get("/api/patients/registrations", {
+        params: { status: "待诊中", page: 1, size: 100 },
+      }),
+    ]);
     waitingQueue.value = [
-      {
-        id: 1,
-        name: "李建国",
-        gender: "男",
-        age: "65岁",
-        regNo: "REG260611001",
-      },
-      { id: 2, name: "王芳", gender: "女", age: "32岁", regNo: "REG260611002" },
-      {
-        id: 3,
-        name: "赵小明",
-        gender: "男",
-        age: "8岁",
-        regNo: "REG260611003",
-      },
-    ];
+      ...(waiting.records || []),
+      ...(waitingLegacy.records || []),
+    ].map((item) => ({
+      id: item.id,
+      patientId: item.patientId,
+      name: item.patientName || `患者#${item.patientId}`,
+      gender: "",
+      age: "",
+      regNo: item.regNo,
+    }));
   } catch (e) {
     console.error(e);
   }
 };
 
-const callPatient = (patient) => {
+const callPatient = async (patient) => {
+  await request.post(`/api/doctors/call/${patient.patientId}`);
   activePatient.value = patient;
   Object.keys(recordForm).forEach((key) => (recordForm[key] = ""));
 };
@@ -213,7 +213,7 @@ const submitRecord = async () => {
   if (!recordForm.diagnosis) return ElMessage.warning("请填写初步诊断");
 
   const submitData = {
-    patientId: activePatient.value.id,
+    patientId: activePatient.value.patientId,
     doctorId: userStore.userId || 1,
     diagnosis: recordForm.diagnosis,
     treatmentPlan: `主诉: ${recordForm.chiefComplaint}\n现病史: ${recordForm.presentIllness}\n既往史: ${recordForm.pastHistory}`,

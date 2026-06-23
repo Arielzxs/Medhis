@@ -65,78 +65,59 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick } from "vue";
 import * as echarts from "echarts";
+import request from "../../utils/request";
 
 const queryParams = reactive({ dateRange: null, category: "" });
 const horizontalBarChartRef = ref(null);
 const tableData = ref([]);
 
+let myChart;
 const initChart = () => {
-  const myChart = echarts.init(horizontalBarChartRef.value);
+  myChart = echarts.init(horizontalBarChartRef.value);
+  updateChart();
+};
+
+const updateChart = () => {
+  const rows = tableData.value.slice(0, 5).reverse();
   myChart.setOption({
-    title: { text: "出库药品消耗数量 Top 5 排行榜" },
+    title: { text: "药品库存数量 Top 5" },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
     xAxis: { type: "value", boundaryGap: [0, 0.01] },
     yAxis: {
       type: "category",
-      data: [
-        "阿司匹林肠溶片",
-        "头孢克肟胶囊",
-        "连花清瘟胶囊",
-        "复方氨酚烷胺片",
-        "阿莫西林胶囊",
-      ].reverse(),
+      data: rows.map((item) => item.drugName),
     },
     series: [
       {
-        name: "消耗数量",
+        name: "库存数量",
         type: "bar",
-        data: [156, 180, 240, 310, 420],
+        data: rows.map((item) => item.consumption),
         itemStyle: { color: "#67C23A", borderRadius: [0, 4, 4, 0] },
       },
     ],
   });
 };
 
-const handleSearch = () => {
-  tableData.value = [
-    {
-      drugCode: "D001",
-      drugName: "阿莫西林胶囊",
-      category: "西药",
-      consumption: 420,
-    },
-    {
-      drugCode: "D002",
-      drugName: "复方氨酚烷胺片",
-      category: "西药",
-      consumption: 310,
-    },
-    {
-      drugCode: "D003",
-      drugName: "连花清瘟胶囊",
-      category: "中成药",
-      consumption: 240,
-    },
-    {
-      drugCode: "D004",
-      drugName: "头孢克肟胶囊",
-      category: "西药",
-      consumption: 180,
-    },
-    {
-      drugCode: "D005",
-      drugName: "阿司匹林肠溶片",
-      category: "西药",
-      consumption: 156,
-    },
-  ];
+const handleSearch = async () => {
+  const res = await request.get("/api/pharmacy/inventory", {
+    params: { page: 1, size: 100 },
+  });
+  tableData.value = (res.records || [])
+    .map((item) => ({
+      drugCode: item.code,
+      drugName: item.name,
+      category: "--",
+      consumption: item.stock || 0,
+    }))
+    .sort((a, b) => b.consumption - a.consumption);
+  if (myChart) updateChart();
 };
 
 onMounted(() => {
-  handleSearch();
-  nextTick(() => {
+  nextTick(async () => {
     initChart();
+    await handleSearch();
   });
 });
 </script>

@@ -9,11 +9,15 @@ import com.neusoft.his.dal.entity.OutpatientRegistration;
 import com.neusoft.his.dal.entity.Patient;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import com.neusoft.his.dal.mapper.PatientMapper;
+import com.neusoft.his.dal.mapper.DoctorProfileMapper;
+import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.service.dto.PatientRegistrationRequest;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -22,11 +26,14 @@ import java.util.UUID;
 public class PatientService {
     private final PatientMapper patientMapper;
     private final OutpatientRegistrationMapper registrationMapper;
+    private final DoctorProfileMapper doctorMapper;
     private final AuditService auditService;
 
-    public PatientService(PatientMapper patientMapper, OutpatientRegistrationMapper registrationMapper, AuditService auditService) {
+    public PatientService(PatientMapper patientMapper, OutpatientRegistrationMapper registrationMapper,
+                          DoctorProfileMapper doctorMapper, AuditService auditService) {
         this.patientMapper = patientMapper;
         this.registrationMapper = registrationMapper;
+        this.doctorMapper = doctorMapper;
         this.auditService = auditService;
     }
 
@@ -74,7 +81,7 @@ public class PatientService {
         Page<Patient> pageParam = new Page<>(page, size);
         QueryWrapper<Patient> query = new QueryWrapper<>();
         if (StringUtils.isNotBlank(keyword)) {
-            query.like("name", keyword).or().like("patient_no", keyword);
+            query.like("name", keyword).or().like("patient_no", keyword).or().like("id_card", keyword);
         }
         patientMapper.selectPage(pageParam, query);
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
@@ -145,6 +152,46 @@ public class PatientService {
         Patient patient = patientMapper.selectById(patientId);
         if (patient == null) throw new BizException("患者不存在");
         return patient.getCurrentStatus();
+    }
+
+    public PageResponse<Map<String, Object>> registrations(Long id, String status, long page, long size) {
+        Page<OutpatientRegistration> pageParam = new Page<>(page, size);
+        QueryWrapper<OutpatientRegistration> query = new QueryWrapper<>();
+        if (id != null) {
+            query.eq("id", id);
+        }
+        if (StringUtils.isNotBlank(status)) {
+            query.eq("status", status);
+        }
+        query.orderByDesc("created_at");
+        registrationMapper.selectPage(pageParam, query);
+
+        return new PageResponse<>(
+                pageParam.getCurrent(),
+                pageParam.getSize(),
+                pageParam.getTotal(),
+                pageParam.getRecords().stream().map(this::toRegistrationView).toList()
+        );
+    }
+
+    private Map<String, Object> toRegistrationView(OutpatientRegistration reg) {
+        Patient patient = patientMapper.selectById(reg.getPatientId());
+        DoctorProfile doctor = reg.getDoctorId() == null ? null : doctorMapper.selectById(reg.getDoctorId());
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", reg.getId());
+        item.put("regNo", "REG" + reg.getId());
+        item.put("patientId", reg.getPatientId());
+        item.put("patientName", patient == null ? "" : patient.getName());
+        item.put("doctorId", reg.getDoctorId());
+        item.put("doctorName", doctor == null ? "" : doctor.getName());
+        item.put("department", reg.getDepartment());
+        item.put("scheduleDate", reg.getScheduleDate());
+        item.put("status", reg.getStatus());
+        item.put("fee", reg.getFee());
+        item.put("paid", reg.getPaid());
+        item.put("createdAt", reg.getCreatedAt());
+        return item;
     }
 
     /**

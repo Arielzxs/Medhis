@@ -259,6 +259,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from "vue";
+import request from "../../utils/request";
 
 const activeTab = ref("accounts");
 const loading = ref(false);
@@ -267,48 +268,47 @@ const loading = ref(false);
 const accountQuery = reactive({ keyword: "", role: "" });
 const accountList = ref([]);
 
-const fetchAccounts = () => {
+const roleLabel = (role) => {
+  const map = {
+    ADMIN: "管理员",
+    DOCTOR: "门诊医生",
+    REGISTRAR: "挂号员",
+    PHARMACY_ADMIN: "药房管理员",
+    FINANCE: "财务人员",
+  };
+  return map[role] || role || "未分配";
+};
+
+const roleCode = (label) => {
+  const map = {
+    管理员: "ADMIN",
+    门诊医生: "DOCTOR",
+    挂号员: "REGISTRAR",
+    药房管理员: "PHARMACY_ADMIN",
+    财务人员: "FINANCE",
+  };
+  return map[label] || label;
+};
+
+const fetchAccounts = async () => {
   loading.value = true;
-  setTimeout(() => {
-    accountList.value = [
-      {
-        empNo: "EMP10001",
-        name: "张翔硕",
-        department: "信息科",
-        role: "管理员",
-        status: 1,
+  try {
+    const res = await request.get("/api/auth/users", {
+      params: {
+        keyword: accountQuery.keyword || undefined,
+        role: accountQuery.role ? roleCode(accountQuery.role) : undefined,
       },
-      {
-        empNo: "EMP20042",
-        name: "王鹏",
-        department: "内科",
-        role: "门诊医生",
-        status: 1,
-      },
-      {
-        empNo: "EMP30015",
-        name: "邱季翔",
-        department: "挂号处",
-        role: "挂号员",
-        status: 1,
-      },
-      {
-        empNo: "EMP40088",
-        name: "张宏磊",
-        department: "药剂科",
-        role: "药房管理员",
-        status: 1,
-      },
-      {
-        empNo: "EMP50012",
-        name: "黄宇泽",
-        department: "财务处",
-        role: "财务人员",
-        status: 1,
-      },
-    ];
+    });
+    accountList.value = (res || []).map((user) => ({
+      empNo: user.username,
+      name: user.name,
+      department: "--",
+      role: roleLabel(user.roles?.[0]),
+      status: user.enabled === "Y" ? 1 : 0,
+    }));
+  } finally {
     loading.value = false;
-  }, 300);
+  }
 };
 
 const getRoleType = (role) => {
@@ -328,33 +328,16 @@ const activeRole = ref("");
 // ===== 审计日志数据 =====
 const auditLogs = ref([]);
 
-const fetchLogs = () => {
-  auditLogs.value = [
-    {
-      time: "2026-06-11 14:05:12",
-      account: "EMP10001(张翔硕)",
-      ip: "192.168.1.105",
-      module: "系统基础安全",
-      description: "修改了角色 [门诊医生] 的菜单访问矩阵",
-      status: "放行成功",
-    },
-    {
-      time: "2026-06-11 11:32:00",
-      account: "EMP50012(黄宇泽)",
-      ip: "192.168.3.22",
-      module: "门诊财务",
-      description: "调用支付沙箱关口，发起订单 INV87210512 结算",
-      status: "放行成功",
-    },
-    {
-      time: "2026-06-11 10:45:19",
-      account: "EMP20042(王鹏)",
-      ip: "10.211.55.3",
-      module: "医生工作站",
-      description: "尝试横向越权访问 [人员排班配置接口]",
-      status: "SpringSecurity拦截",
-    },
-  ];
+const fetchLogs = async () => {
+  const res = await request.get("/api/audit/logs");
+  auditLogs.value = (res || []).map((log) => ({
+    time: log.time,
+    account: log.username || "--",
+    ip: "--",
+    module: log.operation || "--",
+    description: log.detail || "",
+    status: "放行成功",
+  }));
 };
 
 onMounted(() => {

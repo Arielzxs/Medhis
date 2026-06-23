@@ -200,7 +200,7 @@
             <el-button
               type="success"
               size="large"
-              :disabled="!selectedSchedule || !patientForm.idCard"
+              :disabled="!selectedSchedule || !patientForm.id"
               @click="submitRegistration"
             >
               确认挂号并缴费
@@ -215,10 +215,12 @@
 <script setup>
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage } from "element-plus";
+import request from "../../utils/request";
 
 // ===== 患者信息逻辑 =====
 const searchIdCard = ref("");
 const patientForm = reactive({
+  id: null,
   name: "",
   idCard: "",
   gender: "男",
@@ -227,20 +229,46 @@ const patientForm = reactive({
   balance: 0.0,
 });
 
-const handleSearchPatient = () => {
+const handleSearchPatient = async () => {
   if (!searchIdCard.value) return ElMessage.warning("请输入身份证号");
-  // 模拟查出患者
-  patientForm.name = "李建国";
-  patientForm.idCard = searchIdCard.value;
-  patientForm.gender = "男";
-  patientForm.phone = "13800138000";
-  patientForm.balance = 150.0;
+  const res = await request.get("/api/patients", {
+    params: { keyword: searchIdCard.value, page: 1, size: 1 },
+  });
+  const patient = res.records?.[0];
+  if (!patient) {
+    patientForm.id = null;
+    patientForm.idCard = searchIdCard.value;
+    return ElMessage.warning("未查询到患者档案，可直接新建档案");
+  }
+  Object.assign(patientForm, {
+    id: patient.id,
+    name: patient.name || "",
+    idCard: patient.idCard || "",
+    gender: patient.gender || "未知",
+    birthday: patient.birthday || "",
+    phone: patient.phone || "",
+    balance: 0,
+  });
   ElMessage.success("档案读取成功");
 };
 
-const savePatient = () => {
+const savePatient = async () => {
   if (!patientForm.name || !patientForm.idCard)
     return ElMessage.warning("请填写基础必填信息");
+  const payload = {
+    name: patientForm.name,
+    idCard: patientForm.idCard,
+    gender: patientForm.gender,
+    birthday:
+      patientForm.birthday instanceof Date
+        ? patientForm.birthday.toISOString().slice(0, 10)
+        : patientForm.birthday,
+    phone: patientForm.phone,
+  };
+  const saved = patientForm.id
+    ? await request.put(`/api/patients/${patientForm.id}`, payload)
+    : await request.post("/api/patients", payload);
+  patientForm.id = saved.id;
   ElMessage.success("患者档案保存成功");
 };
 
@@ -250,37 +278,29 @@ const scheduleList = ref([]);
 const selectedScheduleId = ref(null);
 const selectedSchedule = ref(null);
 
-const fetchSchedules = () => {
-  // 模拟假数据
-  scheduleList.value = [
-    {
-      id: 1,
-      doctorName: "王鹏",
-      title: "主任医师",
-      department: "心血管内科",
-      shift: "上午",
-      fee: 50.0,
-      remain: 12,
-    },
-    {
-      id: 2,
-      doctorName: "孙芳",
-      title: "副主任医师",
-      department: "儿科",
-      shift: "下午",
-      fee: 30.0,
-      remain: 5,
-    },
-    {
-      id: 3,
-      doctorName: "李静",
-      title: "主治医师",
-      department: "消化内科",
-      shift: "上午",
-      fee: 20.0,
-      remain: 0,
-    },
-  ];
+const doctorFee = (title = "") => {
+  if (title.includes("主任")) return 50;
+  if (title.includes("副主任")) return 30;
+  return 20;
+};
+
+const fetchSchedules = async () => {
+  const res = await request.get("/api/doctors/schedules", {
+    params: { department: scheduleQuery.department, page: 1, size: 100 },
+  });
+  scheduleList.value = (res.records || [])
+    .filter((doctor) =>
+      scheduleQuery.doctorName ? doctor.name?.includes(scheduleQuery.doctorName) : true,
+    )
+    .map((doctor) => ({
+      id: doctor.id,
+      doctorName: doctor.name,
+      title: doctor.title || "普通医师",
+      department: doctor.department,
+      shift: doctor.attendanceStatus || "全天",
+      fee: doctorFee(doctor.title),
+      remain: doctor.attendanceStatus === "停诊" ? 0 : 50,
+    }));
   selectedScheduleId.value = null;
   selectedSchedule.value = null;
 };
@@ -294,15 +314,21 @@ const handleSelectSchedule = (row) => {
   }
 };
 
-const submitRegistration = () => {
-  if (patientForm.balance < selectedSchedule.value.fee) {
-    return ElMessage.error("就诊卡余额不足，请先充值或选择其他支付方式");
-  }
-  ElMessage.success(
-    `挂号成功！就诊号码：REG260621008，已扣除余额 ¥${selectedSchedule.value.fee}`,
-  );
-  patientForm.balance -= selectedSchedule.value.fee;
-  fetchSchedules(); // 刷新号源
+const submitRegistration = async () => {
+  if (!patientForm.id) return ElMessage.warning("请先读取或保存患者档案");
+  const reg = await request.post("/api/patients/registrations", {
+    patientId: patientForm.id,
+    doctorId: selectedSchedule.value.id,
+    department: selectedSchedule.value.department,
+    scheduleDate:
+      scheduleQuery.date instanceof Date
+        ? scheduleQuery.date.toISOString().slice(0, 10)
+        : scheduleQuery.date || new Date().toISOString().slice(0, 10),
+    fee: selectedSchedule.value.fee,
+  });
+  await request.post(`/api/patients/registrations/${reg.id}/pay`);
+  ElMessage.success(`挂号成功！挂号单号：REG${reg.id}`);
+  fetchSchedules();
 };
 
 onMounted(() => {

@@ -399,6 +399,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import request from "../../utils/request";
 
 const activeTab = ref("dispense");
 
@@ -414,71 +415,54 @@ const prescriptionList = ref([]);
 const reviewDialogVisible = ref(false);
 const currentPrescription = ref(null);
 
-const fetchPrescriptions = () => {
+const prescriptionStatus = (row) => {
+  if (row.auditStatus === "REJECTED") return "已退回";
+  if (row.dispenseStatus === "DONE") return "已发药";
+  if (row.auditStatus === "APPROVED" && row.paid === "Y") return "待发药";
+  return "待审核";
+};
+
+const parseItems = (text) => {
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [{ drugName: text, specification: "--", quantity: 1, usage: "--" }];
+  }
+};
+
+const fetchPrescriptions = async () => {
   loadingDispense.value = true;
-  setTimeout(() => {
-    prescriptionList.value = [
-      {
-        id: 1,
-        prescriptionNo: "RX260621001",
-        patientName: "李建国",
-        doctorName: "王鹏",
-        department: "心血管内科",
-        amount: 156.5,
-        status: "待审核",
-        createTime: "2026-06-21 09:40:12",
-        items: [
-          {
-            drugName: "阿司匹林肠溶片",
-            specification: "100mg*30片",
-            quantity: 2,
-            usage: "每日一次，每次一片",
-          },
-        ],
-      },
-      {
-        id: 2,
-        prescriptionNo: "RX260621002",
-        patientName: "王芳",
-        doctorName: "孙芳",
-        department: "儿科",
-        amount: 45.0,
-        status: "待发药",
-        createTime: "2026-06-21 10:20:00",
-        items: [
-          {
-            drugName: "头孢克肟颗粒",
-            specification: "50mg*10袋",
-            quantity: 1,
-            usage: "每日两次，每次一袋",
-          },
-        ],
-      },
-      {
-        id: 3,
-        prescriptionNo: "RX260620015",
-        patientName: "张伟",
-        doctorName: "李静",
-        department: "消化内科",
-        amount: 120.0,
-        status: "已发药",
-        createTime: "2026-06-20 14:30:00",
-        items: [],
-      },
-      {
-        id: 4,
-        prescriptionNo: "RX260620016",
-        patientName: "赵小明",
-        doctorName: "赵强",
-        department: "普外科",
-        amount: 80.0,
-        status: "已退回",
-        createTime: "2026-06-20 15:45:00",
-        items: [],
-      },
-    ];
+  try {
+    const res = await request.get("/api/doctors/prescriptions");
+    prescriptionList.value = (res || [])
+      .map((item) => ({
+        id: item.id,
+        prescriptionNo: `RX${item.id}`,
+        patientName: `患者#${item.patientId}`,
+        doctorName: `医生#${item.doctorId}`,
+        department: "--",
+        amount: Number(item.totalAmount || 0),
+        status: prescriptionStatus(item),
+        createTime: item.createdAt || "",
+        items: parseItems(item.drugItems),
+      }))
+      .filter((item) => {
+        const noMatched = dispenseQuery.prescriptionNo
+          ? item.prescriptionNo.includes(dispenseQuery.prescriptionNo)
+          : true;
+        const nameMatched = dispenseQuery.patientName
+          ? item.patientName.includes(dispenseQuery.patientName)
+          : true;
+        const statusMatched = dispenseQuery.status
+          ? item.status === dispenseQuery.status
+          : true;
+        return noMatched && nameMatched && statusMatched;
+      });
+  } finally {
     loadingDispense.value = false;
-  }, 400);
+  }
 };
 
 const getPrescriptionStatusType = (status) => {
@@ -508,7 +492,12 @@ const openReviewDialog = (row) => {
   reviewDialogVisible.value = true;
 };
 
-const submitReview = (isPass) => {
+const submitReview = async (isPass) => {
+  await request.post(
+    `/api/pharmacy/prescriptions/${currentPrescription.value.id}/review`,
+    null,
+    { params: { approved: isPass } },
+  );
   if (isPass) {
     ElMessage.success(
       `处方 ${currentPrescription.value.prescriptionNo} 审核通过，流转至待发药`,
@@ -533,9 +522,17 @@ const handleDispense = (row) => {
       type: "warning",
     },
   )
-    .then(() => {
+    .then(async () => {
+      const firstItem = row.items?.[0];
+      if (!firstItem?.drugId) {
+        ElMessage.warning("处方明细缺少药品 ID，无法自动发药");
+        return;
+      }
+      await request.post(`/api/pharmacy/prescriptions/${row.id}/dispense`, null, {
+        params: { drugId: firstItem.drugId, quantity: firstItem.quantity || 1 },
+      });
       ElMessage.success("发药成功，库存已自动扣减");
-      row.status = "已发药";
+      fetchPrescriptions();
     })
     .catch(() => {});
 };
@@ -553,57 +550,36 @@ const inboundDialogVisible = ref(false);
 const currentDrug = ref(null);
 const inboundForm = reactive({ quantity: 50, supplier: "" });
 
-const fetchDrugs = () => {
+const fetchDrugs = async () => {
   loadingInventory.value = true;
-  setTimeout(() => {
-    drugList.value = [
-      {
-        id: 1,
-        drugCode: "D10021",
-        drugName: "阿莫西林胶囊",
-        category: "西药",
-        specification: "0.25g*50粒",
-        unit: "盒",
-        price: 15.5,
-        stock: 320,
-        warningThreshold: 100,
-      },
-      {
-        id: 2,
-        drugCode: "D10022",
-        drugName: "连花清瘟胶囊",
-        category: "中成药",
-        specification: "0.35g*24粒",
-        unit: "盒",
-        price: 29.8,
-        stock: 45,
-        warningThreshold: 50,
-      },
-      {
-        id: 3,
-        drugCode: "D10023",
-        drugName: "阿司匹林肠溶片",
-        category: "西药",
-        specification: "100mg*30片",
-        unit: "瓶",
-        price: 12.0,
-        stock: 20,
-        warningThreshold: 50,
-      },
-      {
-        id: 4,
-        drugCode: "D10024",
-        drugName: "布洛芬缓释胶囊",
-        category: "西药",
-        specification: "0.3g*22粒",
-        unit: "盒",
-        price: 18.5,
-        stock: 150,
-        warningThreshold: 50,
-      },
-    ];
+  try {
+    const res = await request.get("/api/pharmacy/inventory", {
+      params: { page: 1, size: 100 },
+    });
+    drugList.value = (res.records || [])
+      .map((item) => ({
+        id: item.id,
+        drugCode: item.code,
+        drugName: item.name,
+        category: "--",
+        specification: "--",
+        unit: item.unit || "",
+        price: Number(item.price || 0),
+        stock: item.stock || 0,
+        warningThreshold: item.warningThreshold || 0,
+      }))
+      .filter((item) => {
+        const codeMatched = inventoryQuery.drugCode
+          ? item.drugCode?.includes(inventoryQuery.drugCode)
+          : true;
+        const nameMatched = inventoryQuery.drugName
+          ? item.drugName?.includes(inventoryQuery.drugName)
+          : true;
+        return codeMatched && nameMatched;
+      });
+  } finally {
     loadingInventory.value = false;
-  }, 400);
+  }
 };
 
 const filteredDrugList = computed(() => {
@@ -624,13 +600,16 @@ const openInboundDialog = (row) => {
   inboundDialogVisible.value = true;
 };
 
-const submitInbound = () => {
+const submitInbound = async () => {
   if (!inboundForm.supplier) return ElMessage.warning("请选择供应商");
-  currentDrug.value.stock += inboundForm.quantity;
+  await request.post(`/api/pharmacy/drugs/${currentDrug.value.id}/inbound`, null, {
+    params: { quantity: inboundForm.quantity },
+  });
   ElMessage.success(
     `成功入库 ${inboundForm.quantity} ${currentDrug.value.unit} ${currentDrug.value.drugName}`,
   );
   inboundDialogVisible.value = false;
+  fetchDrugs();
 };
 
 onMounted(() => {

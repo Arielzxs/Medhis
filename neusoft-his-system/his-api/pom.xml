@@ -8,10 +8,7 @@
         <groupId>com.neusoft</groupId>
         <artifactId>medical-imaging-system</artifactId>
         <version>1.0.0.0</version>
-<<<<<<< HEAD
         <relativePath>../pom.xml</relativePath>
-=======
->>>>>>> 47f8a69 (a)
     </parent>
 
     <artifactId>his-api</artifactId>
@@ -44,16 +41,4 @@
             <artifactId>kaptcha</artifactId>
         </dependency>
     </dependencies>
-
-<<<<<<< HEAD
-=======
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
->>>>>>> 47f8a69 (a)
 </project>

@@ -8,6 +8,8 @@ import com.neusoft.his.service.dto.AuthRequest;
 import com.neusoft.his.service.dto.LoginResponse;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @RestController
@@ -34,5 +36,12 @@ public class AuthController {
     public ApiResponse<Void> assignRoles(@PathVariable Long userId, @RequestBody Set<String> roles) {
         authService.assignRoles(userId, roles);
         return ApiResponse.ok("角色分配成功", null);
+    }
+
+    @GetMapping("/users")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<List<Map<String, Object>>> users(@RequestParam(required = false) String keyword,
+                                                        @RequestParam(required = false) String role) {
+        return ApiResponse.ok(authService.listUsers(keyword, role));
     }
 }

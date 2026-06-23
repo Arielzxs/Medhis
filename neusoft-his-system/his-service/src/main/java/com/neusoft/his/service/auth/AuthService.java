@@ -15,6 +15,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -106,5 +109,39 @@ public class AuthService {
         }
 
         auditService.log("ASSIGN_ROLES", "为用户 " + user.getUsername() + " 分配角色: " + roles.toString());
+    }
+
+    public List<Map<String, Object>> listUsers(String keyword, String role) {
+        QueryWrapper<SysUser> query = new QueryWrapper<>();
+        if (keyword != null && !keyword.isBlank()) {
+            query.like("username", keyword).or().like("name", keyword);
+        }
+        query.orderByDesc("created_at");
+
+        return sysUserMapper.selectList(query).stream()
+                .map(user -> {
+                    QueryWrapper<SysUserRole> roleQuery = new QueryWrapper<>();
+                    roleQuery.eq("user_id", user.getId());
+                    Set<String> roles = sysUserRoleMapper.selectList(roleQuery).stream()
+                            .map(SysUserRole::getRoleCode)
+                            .collect(Collectors.toSet());
+                    if (roles.isEmpty() && "admin".equals(user.getUsername())) {
+                        roles = Set.of(RoleCode.ADMIN);
+                    }
+                    if (role != null && !role.isBlank() && !roles.contains(role)) {
+                        return null;
+                    }
+
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", user.getId());
+                    item.put("username", user.getUsername());
+                    item.put("name", user.getName());
+                    item.put("enabled", user.getEnabled());
+                    item.put("roles", roles);
+                    item.put("createdAt", user.getCreatedAt());
+                    return item;
+                })
+                .filter(item -> item != null)
+                .toList();
     }
 }

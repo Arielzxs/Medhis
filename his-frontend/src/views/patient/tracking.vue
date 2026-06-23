@@ -41,6 +41,7 @@
               style="width: 120px"
             >
               <el-option label="待缴费" value="待缴费" />
+              <el-option label="待诊" value="待诊" />
               <el-option label="待诊中" value="待诊中" />
               <el-option label="就诊中" value="就诊中" />
               <el-option label="已完成" value="已完成" />
@@ -131,7 +132,7 @@
               confirm-button-text="确认退号"
               cancel-button-text="取消"
               @confirm="cancelRegistration(scope.row)"
-              v-if="['待缴费', '待诊中'].includes(scope.row.status)"
+              v-if="['待缴费', '待诊', '待诊中'].includes(scope.row.status)"
             >
               <template #reference>
                 <el-button type="danger" link size="small">取消挂号</el-button>
@@ -145,7 +146,9 @@
         <el-pagination
           background
           layout="total, prev, pager, next"
-          :total="42"
+          :total="total"
+          v-model:current-page="queryParams.page"
+          @current-change="fetchRecords"
         />
       </div>
     </el-card>
@@ -155,6 +158,7 @@
 <script setup>
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage } from "element-plus";
+import request from "../../utils/request";
 
 const loading = ref(false);
 const queryParams = reactive({
@@ -162,72 +166,39 @@ const queryParams = reactive({
   patientName: "",
   dateRange: null,
   status: "",
+  page: 1,
 });
 
 const tableData = ref([]);
+const total = ref(0);
 
-const fetchRecords = () => {
+const fetchRecords = async () => {
   loading.value = true;
-  setTimeout(() => {
-    tableData.value = [
-      {
-        id: 1,
-        regNo: "REG260621001",
-        patientName: "李建国",
-        department: "心血管内科",
-        doctorName: "王鹏",
-        scheduleDate: "2026-06-21 09:00",
-        fee: 50.0,
-        status: "待诊中",
+  try {
+    const id = queryParams.regNo?.replace(/^REG/i, "");
+    const res = await request.get("/api/patients/registrations", {
+      params: {
+        id: id || undefined,
+        status: queryParams.status || undefined,
+        page: queryParams.page,
+        size: 10,
       },
-      {
-        id: 2,
-        regNo: "REG260621002",
-        patientName: "王芳",
-        department: "儿科",
-        doctorName: "孙芳",
-        scheduleDate: "2026-06-21 10:15",
-        fee: 30.0,
-        status: "就诊中",
-      },
-      {
-        id: 3,
-        regNo: "REG260621003",
-        patientName: "赵小明",
-        department: "普外科",
-        doctorName: "赵强",
-        scheduleDate: "2026-06-21 11:30",
-        fee: 20.0,
-        status: "待缴费",
-      },
-      {
-        id: 4,
-        regNo: "REG260620015",
-        patientName: "张伟",
-        department: "消化内科",
-        doctorName: "李静",
-        scheduleDate: "2026-06-20 14:00",
-        fee: 20.0,
-        status: "已完成",
-      },
-      {
-        id: 5,
-        regNo: "REG260620016",
-        patientName: "刘强",
-        department: "呼吸内科",
-        doctorName: "周游",
-        scheduleDate: "2026-06-20 15:30",
-        fee: 20.0,
-        status: "已退号",
-      },
-    ];
+    });
+    tableData.value = (res.records || []).filter((item) =>
+      queryParams.patientName
+        ? item.patientName?.includes(queryParams.patientName)
+        : true,
+    );
+    total.value = res.total || tableData.value.length;
+  } finally {
     loading.value = false;
-  }, 400);
+  }
 };
 
 const getStatusType = (status) => {
   const map = {
     待缴费: "warning",
+    待诊: "primary",
     待诊中: "primary",
     就诊中: "danger",
     已完成: "success",
@@ -245,16 +216,19 @@ const resetQuery = () => {
   queryParams.patientName = "";
   queryParams.dateRange = null;
   queryParams.status = "";
+  queryParams.page = 1;
   fetchRecords();
 };
 
-const printTicket = (row) => {
-  ElMessage.success(`挂号单 ${row.regNo} 打印指令已发送`);
+const printTicket = async (row) => {
+  const content = await request.get(`/api/patients/registrations/${row.id}/print`);
+  ElMessage.success(content || `挂号单 ${row.regNo} 打印指令已发送`);
 };
 
-const cancelRegistration = (row) => {
+const cancelRegistration = async (row) => {
+  await request.post(`/api/patients/registrations/${row.id}/cancel`);
   ElMessage.success(`挂号单 ${row.regNo} 已成功退号`);
-  row.status = "已退号";
+  fetchRecords();
 };
 
 onMounted(() => {

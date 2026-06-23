@@ -33,6 +33,13 @@ public class FinanceController {
         return ApiResponse.ok(service.charge(id, channel, settlementType));
     }
 
+    @GetMapping("/bills")
+    public ApiResponse<PageResponse<BillingRecord>> bills(@RequestParam(required = false) String status,
+                                                          @RequestParam(defaultValue = "1") long page,
+                                                          @RequestParam(defaultValue = "10") long size) {
+        return ApiResponse.ok(service.bills(status, page, size));
+    }
+
     @PostMapping("/prescriptions/{id}/mark-paid")
     public ApiResponse<Void> markPaid(@PathVariable Long id) {
         service.markPrescriptionPaid(id);
