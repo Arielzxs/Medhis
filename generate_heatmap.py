@@ -1,4 +1,3 @@
-
 import subprocess
 import datetime
 import os
@@ -8,6 +7,13 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import numpy as np
+
+# ================= 针对 macOS 的中文字体配置 =================
+# macOS 优先尝试使用 'Arial Unicode MS' 或 'PingFang SC' (苹方)
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'PingFang SC', 'Heiti TC', 'sans-serif']
+# 解决坐标轴负号 ('-') 显示为方块的问题
+plt.rcParams['axes.unicode_minus'] = False 
+# =========================================================
 
 def normalize_name(name):
     """标准化名字:小写+移除非字母数字字符"""
