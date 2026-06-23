@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.neusoft</groupId>
+    <artifactId>medical-imaging-system</artifactId>
+<<<<<<< HEAD
+    <version>1.0.0.0</version>
+=======
+    <version>${revision}</version>
+>>>>>>> 47f8a69 (a)
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>his-common</module>
+        <module>his-dal</module>
+        <module>his-service</module>
+        <module>his-api</module>
+        <module>his-boot-web</module>
+    </modules>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.3</version>
+        <relativePath></relativePath>
+    </parent>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+<<<<<<< HEAD
+=======
+        <revision>1.0.0.0</revision>
+
+>>>>>>> 47f8a69 (a)
+        <mybatis-plus.version>3.5.7</mybatis-plus.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
+        <jjwt.version>0.12.5</jjwt.version>
+        <kaptcha.version>2.3.2</kaptcha.version>
+        <google.genai.version>0.4.0</google.genai.version>
+        <his.version>1.0.0.0</his.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.google.genai</groupId>
+                <artifactId>google-genai</artifactId>
+                <version>${google.genai.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>${commons-lang3.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+<<<<<<< HEAD
+                <artifactId>jjwt-api</artifactId>
+=======
+                <artifactId>jjwt</artifactId>
+>>>>>>> 47f8a69 (a)
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.penggle</groupId>
+                <artifactId>kaptcha</artifactId>
+                <version>${kaptcha.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.neusoft</groupId>
+                <artifactId>his-dal</artifactId>
+                <version>${his.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.neusoft</groupId>
+                <artifactId>his-common</artifactId>
+                <version>${his.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.neusoft</groupId>
+                <artifactId>his-service</artifactId>
+                <version>${his.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.neusoft</groupId>
+                <artifactId>his-api</artifactId>
+                <version>${his.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>
