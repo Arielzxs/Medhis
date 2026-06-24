@@ -1,48 +1,92 @@
 <template>
-  <div class="auth-container">
-    <el-card class="auth-card">
-      <template #header>
-        <div class="card-header">
-          <h2 class="title">HIS 医疗系统登录</h2>
+  <main class="auth-page">
+    <section class="brand-panel">
+      <div class="brand-content">
+        <div class="brand-mark">
+          <FirstAidKit />
         </div>
-      </template>
+        <p class="eyebrow">MEDHIS · 智慧医院管理平台</p>
+        <h1>让每一次诊疗协作<br />更清晰、更高效</h1>
+        <p class="brand-description">
+          连接挂号、医生、药房与财务，为医院日常运营提供安全可靠的一体化工作空间。
+        </p>
+        <div class="feature-list">
+          <div class="feature-item">
+            <CircleCheckFilled />
+            <span>统一业务流程与数据看板</span>
+          </div>
+          <div class="feature-item">
+            <CircleCheckFilled />
+            <span>基于角色的精细权限控制</span>
+          </div>
+          <div class="feature-item">
+            <CircleCheckFilled />
+            <span>关键操作全程安全审计</span>
+          </div>
+        </div>
+      </div>
+      <div class="decor decor-one"></div>
+      <div class="decor decor-two"></div>
+    </section>
 
-      <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef">
-        <el-form-item prop="username">
+    <section class="form-panel">
+      <div class="auth-card">
+        <div class="mobile-brand">
+          <span class="mobile-logo"><FirstAidKit /></span>
+          <span>MEDHIS</span>
+        </div>
+        <div class="card-heading">
+          <span class="welcome-tag">欢迎回来</span>
+          <h2>登录您的工作台</h2>
+          <p>请输入账号信息以继续使用系统</p>
+        </div>
+
+        <el-form
+          ref="loginFormRef"
+          :model="loginForm"
+          :rules="loginRules"
+          label-position="top"
+          size="large"
+          @submit.prevent="handleLogin"
+        >
+          <el-form-item label="用户名" prop="username">
           <el-input
             v-model="loginForm.username"
-            placeholder="请输入用户名"
-            prefix-icon="User"
+              placeholder="请输入用户名或职工工号"
+              :prefix-icon="User"
+              autocomplete="username"
+              clearable
           />
         </el-form-item>
-        <el-form-item prop="password">
+          <el-form-item label="密码" prop="password">
           <el-input
             v-model="loginForm.password"
             type="password"
             placeholder="请输入密码"
-            prefix-icon="Lock"
+              :prefix-icon="Lock"
+              autocomplete="current-password"
+              show-password
             @keyup.enter="handleLogin"
           />
         </el-form-item>
-        <el-form-item>
           <el-button
             type="primary"
+            native-type="submit"
             class="submit-btn"
             :loading="loading"
-            @click="handleLogin"
           >
-            登 录
+            登录系统
+            <ArrowRight class="button-icon" />
           </el-button>
-        </el-form-item>
         <div class="toggle-link">
           <span>没有账号？</span>
-          <el-button type="primary" link @click="goToRegister"
-            >立即注册</el-button
-          >
+            <button type="button" @click="goToRegister">创建账号</button>
         </div>
       </el-form>
-    </el-card>
-  </div>
+        <p class="security-tip"><Lock /> 系统采用加密传输保护您的账号信息</p>
+      </div>
+    </section>
+  </main>
 </template>
 
 <script setup>
@@ -50,32 +94,46 @@ import { ref, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "../../store/user";
 import { ElMessage } from "element-plus";
+import {
+  ArrowRight,
+  CircleCheckFilled,
+  FirstAidKit,
+  Lock,
+  User,
+} from "@element-plus/icons-vue";
 
 const router = useRouter();
 const userStore = useUserStore();
 const loading = ref(false);
 const loginFormRef = ref(null);
 
-const loginForm = reactive({ username: "admin", password: "123456" });
+const loginForm = reactive({ username: "", password: "" });
 
 const loginRules = {
-  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
-  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
+  username: [
+    { required: true, message: "请输入用户名", trigger: ["blur", "change"] },
+  ],
+  password: [
+    { required: true, message: "请输入密码", trigger: ["blur", "change"] },
+  ],
 };
 
-const handleLogin = () => {
-  loginFormRef.value.validate(async (valid) => {
-    if (valid) {
-      loading.value = true;
-      try {
-        await userStore.login(loginForm);
-        ElMessage.success("登录成功");
-        router.push("/");
-      } finally {
-        loading.value = false;
-      }
-    }
-  });
+const handleLogin = async () => {
+  if (loading.value) return;
+  const valid = await loginFormRef.value.validate().catch(() => false);
+  if (!valid) return;
+
+  loading.value = true;
+  try {
+    await userStore.login({
+      username: loginForm.username.trim(),
+      password: loginForm.password,
+    });
+    ElMessage.success("登录成功");
+    router.push("/");
+  } finally {
+    loading.value = false;
+  }
 };
 
 const goToRegister = () => {
@@ -84,33 +142,5 @@ const goToRegister = () => {
 </script>
 
 <style scoped>
-.auth-container {
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #f0f2f5;
-}
-.auth-card {
-  width: 400px;
-  padding: 10px 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-.card-header {
-  display: flex;
-  justify-content: center;
-}
-.title {
-  margin: 0;
-  color: #303133;
-}
-.submit-btn {
-  width: 100%;
-  font-size: 16px;
-}
-.toggle-link {
-  text-align: right;
-  font-size: 13px;
-  color: #606266;
-}
+@import "../auth.css";
 </style>

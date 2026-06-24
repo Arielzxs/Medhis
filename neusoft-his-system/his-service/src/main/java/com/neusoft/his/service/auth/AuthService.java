@@ -24,6 +24,20 @@ import java.util.stream.Collectors;
 
 @Service
 public class AuthService {
+    private static final Set<String> ALL_ROLES = Set.of(
+            RoleCode.ADMIN,
+            RoleCode.DOCTOR,
+            RoleCode.REGISTRAR,
+            RoleCode.PHARMACY_ADMIN,
+            RoleCode.FINANCE
+    );
+    private static final Set<String> SELF_REGISTER_ROLES = Set.of(
+            RoleCode.DOCTOR,
+            RoleCode.REGISTRAR,
+            RoleCode.PHARMACY_ADMIN,
+            RoleCode.FINANCE
+    );
+
     private final SysUserMapper sysUserMapper;
     private final SysUserRoleMapper sysUserRoleMapper;
     private final JwtTokenProvider tokenProvider;
@@ -41,21 +55,37 @@ public class AuthService {
 
     @Transactional(rollbackFor = Exception.class)
     public Long register(AuthRequest req) {
+        if (req.username() == null || req.username().isBlank()
+                || req.password() == null || req.password().isBlank()
+                || req.name() == null || req.name().isBlank()) {
+            throw new BizException("用户名、姓名和密码不能为空");
+        }
+
+        String role = req.role() == null ? "" : req.role().trim().toUpperCase();
+        if (!SELF_REGISTER_ROLES.contains(role)) {
+            throw new BizException("请选择有效的用户身份");
+        }
+
         QueryWrapper<SysUser> query = new QueryWrapper<>();
-        query.eq("username", req.username());
+        query.eq("username", req.username().trim());
         if (sysUserMapper.selectCount(query) > 0) {
             throw new BizException("用户名已存在");
         }
 
         SysUser user = new SysUser();
-        user.setUsername(req.username());
+        user.setUsername(req.username().trim());
         user.setPassword(passwordEncoder.encode(req.password()));
-        user.setName(req.name());
+        user.setName(req.name().trim());
         user.setEnabled("Y");
         user.setCreatedAt(LocalDateTime.now());
         sysUserMapper.insert(user);
 
-        auditService.log("REGISTER", "新用户注册: " + user.getUsername());
+        SysUserRole userRole = new SysUserRole();
+        userRole.setUserId(user.getId());
+        userRole.setRoleCode(role);
+        sysUserRoleMapper.insert(userRole);
+
+        auditService.log("REGISTER", "新用户注册: " + user.getUsername() + "，角色: " + role);
         return user.getId();
     }
 
@@ -93,6 +123,9 @@ public class AuthService {
         SysUser user = sysUserMapper.selectById(userId);
         if (user == null) {
             throw new BizException("用户不存在");
+        }
+        if (roles == null || roles.stream().anyMatch(role -> !ALL_ROLES.contains(role))) {
+            throw new BizException("包含无效的系统角色");
         }
 
         // 先删除该用户原来的所有旧角色
