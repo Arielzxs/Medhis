@@ -1,0 +1,13 @@
+.DS_Store
+
+# Frontend
+his-frontend/node_modules/
+his-frontend/dist/
+
+# Java / Maven
+neusoft-his-system/.m2repo/
+**/target/
+
+# IDE
+**/.idea/
+**/.vscode/
