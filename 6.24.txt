@@ -1,107 +1,67 @@
-package com.neusoft.his.service.doctor;
+package com.neusoft.his.service.analytics;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.audit.AuditService;
-import com.neusoft.his.common.exception.BizException;
-import com.neusoft.his.dal.entity.DoctorProfile;
+import com.neusoft.his.dal.entity.FinancialTransaction;
 import com.neusoft.his.dal.entity.MedicalRecord;
-import com.neusoft.his.dal.entity.Prescription;
-import com.neusoft.his.dal.mapper.DoctorProfileMapper;
+import com.neusoft.his.dal.entity.OutpatientRegistration;
+import com.neusoft.his.dal.mapper.FinancialTransactionMapper;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
-import com.neusoft.his.dal.mapper.PrescriptionMapper;
-import org.apache.commons.lang3.StringUtils;
+import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
-public class DoctorWorkstationService {
-    private final DoctorProfileMapper doctorMapper;
+public class AnalyticsService {
+    private final OutpatientRegistrationMapper registrationMapper;
     private final MedicalRecordMapper recordMapper;
-    private final PrescriptionMapper prescriptionMapper;
+    private final FinancialTransactionMapper transactionMapper;
     private final AuditService auditService;
 
-    public DoctorWorkstationService(DoctorProfileMapper doctorMapper, MedicalRecordMapper recordMapper,
-                                    PrescriptionMapper prescriptionMapper, AuditService auditService) {
-        this.doctorMapper = doctorMapper;
+    public AnalyticsService(OutpatientRegistrationMapper registrationMapper, MedicalRecordMapper recordMapper,
+                            FinancialTransactionMapper transactionMapper, AuditService auditService) {
+        this.registrationMapper = registrationMapper;
         this.recordMapper = recordMapper;
-        this.prescriptionMapper = prescriptionMapper;
+        this.transactionMapper = transactionMapper;
         this.auditService = auditService;
     }
 
-    @Transactional(rollbackFor = Exception.class)
-    public DoctorProfile saveDoctor(DoctorProfile doctor) {
-        if (doctor.getId() == null) {
-            doctor.setCreatedAt(LocalDateTime.now());
-            doctorMapper.insert(doctor);
-        } else {
-            doctor.setUpdatedAt(LocalDateTime.now());
-            doctorMapper.updateById(doctor);
-        }
-        auditService.log("DOCTOR_SAVE", "医生档案: " + doctor.getName());
-        return doctor;
+    public Map<String, Long> outpatientTrend() {
+        List<OutpatientRegistration> list = registrationMapper.selectList(new QueryWrapper<>());
+        return list.stream()
+                .filter(r -> r.getCreatedAt() != null)
+                .collect(Collectors.groupingBy(
+                        r -> r.getCreatedAt().toLocalDate().toString(),
+                        Collectors.counting()
+                ));
     }
 
-    public PageResponse<DoctorProfile> scheduleQuery(String department, long page, long size) {
-        Page<DoctorProfile> pageParam = new Page<>(page, size);
-        QueryWrapper<DoctorProfile> query = new QueryWrapper<>();
-        if (StringUtils.isNotBlank(department)) {
-            query.eq("department", department);
-        }
-        doctorMapper.selectPage(pageParam, query);
-        return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
+    public Map<String, Long> doctorWorkload() {
+        List<MedicalRecord> list = recordMapper.selectList(new QueryWrapper<>());
+        return list.stream()
+                .filter(r -> r.getDoctorId() != null)
+                .collect(Collectors.groupingBy(
+                        r -> "Doctor_ID_" + r.getDoctorId(),
+                        Collectors.counting()
+                ));
     }
 
-    public String callPatient(Long patientId) {
-        auditService.log("CALL_PATIENT", "呼叫患者: " + patientId);
-        return "请患者" + patientId + "到诊室就诊";
+    public String financeSummary() {
+        List<FinancialTransaction> records = transactionMapper.selectList(new QueryWrapper<>());
+        double in = records.stream().filter(r -> "IN".equals(r.getDirection())).mapToDouble(r -> r.getAmount().doubleValue()).sum();
+        double out = records.stream().filter(r -> "OUT".equals(r.getDirection())).mapToDouble(r -> r.getAmount().doubleValue()).sum();
+        return "财务报表: 总收入=" + in + ", 总支出=" + out + ", 总结余=" + (in - out);
     }
 
-    @Transactional(rollbackFor = Exception.class)
-    public MedicalRecord saveRecord(MedicalRecord record) {
-        if (record.getId() == null) {
-            record.setCreatedAt(LocalDateTime.now());
-            record.setArchiveFlag("Y");
-            recordMapper.insert(record);
-        } else {
-            record.setUpdatedAt(LocalDateTime.now());
-            recordMapper.updateById(record);
-        }
-        auditService.log("MEDICAL_RECORD", "病历保存: patient=" + record.getPatientId());
-        return record;
+    public Map<String, Object> dashboard() {
+        return Map.of(
+                "outpatientTrend", outpatientTrend(),
+                "doctorWorkload", doctorWorkload(),
+                "financeSummary", financeSummary(),
+                "auditLogCount", auditService.list().size() // 演示保留
+        );
     }
-
-    @Transactional(rollbackFor = Exception.class)
-    public Prescription prescribe(Prescription prescription) {
-        if (prescription.getPatientId() == null || prescription.getDoctorId() == null) {
-            throw new BizException("处方患者和医生不能为空");
-        }
-        prescription.setAuditStatus("PENDING");
-        prescription.setPaid("N");
-        prescription.setDispenseStatus("WAITING");
-        prescription.setCreatedAt(LocalDateTime.now());
-        prescriptionMapper.insert(prescription);
-        auditService.log("PRESCRIBE", "处方开具=" + prescription.getId());
-        return prescription;
-    }
-
-    public List<MedicalRecord> history(Long patientId) {
-        QueryWrapper<MedicalRecord> query = new QueryWrapper<>();
-        query.eq("patient_id", patientId).orderByDesc("created_at");
-        return recordMapper.selectList(query);
-    }
-
-    public Prescription getPrescription(Long id) {
-        Prescription prescription = prescriptionMapper.selectById(id);
-        if (prescription == null) throw new BizException("处方不存在");
-        return prescription;
-    }
-
-    public List<Prescription> listPrescriptions() {
-        return prescriptionMapper.selectList(null);
-    }
-}
+}同样分析这个代码
