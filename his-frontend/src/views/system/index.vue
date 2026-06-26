@@ -38,7 +38,9 @@
                 <el-button type="primary" icon="Search" @click="fetchAccounts"
                   >查询</el-button
                 >
-                <el-button type="success" icon="Plus">新增职工账号</el-button>
+                <el-button type="success" icon="Plus" @click="openCreateAccountDialog"
+                  >新增职工账号</el-button
+                >
               </el-form-item>
             </el-form>
           </div>
@@ -94,6 +96,7 @@
                   active-text="启用"
                   inactive-text="停用"
                   inline-prompt
+                  @change="handleAccountStatusChange(scope.row)"
                 />
               </template>
             </el-table-column>
@@ -104,8 +107,20 @@
               fixed="right"
             >
               <template #default="scope">
-                <el-button type="primary" link size="small">修改角色</el-button>
-                <el-button type="warning" link size="small">重置密码</el-button>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="openRoleDialog(scope.row)"
+                  >修改角色</el-button
+                >
+                <el-button
+                  type="warning"
+                  link
+                  size="small"
+                  @click="openResetPasswordDialog(scope.row)"
+                  >重置密码</el-button
+                >
               </template>
             </el-table-column>
           </el-table>
@@ -118,70 +133,70 @@
               <h4 class="section-title">1. 选择系统角色</h4>
               <div class="role-list">
                 <div
+                  v-for="role in roleDefinitions"
+                  :key="role.code"
                   class="role-item"
-                  :class="{ active: activeRole === 'admin' }"
-                  @click="activeRole = 'admin'"
+                  :class="{ active: activeRole === role.code }"
+                  @click="selectRole(role.code)"
                 >
-                  <div class="role-name">系统管理员</div>
-                  <div class="role-desc">
-                    拥有全院系统配置及底层基础支撑最高权限
-                  </div>
-                </div>
-                <div
-                  class="role-item"
-                  :class="{ active: activeRole === 'doctor' }"
-                  @click="activeRole = 'doctor'"
-                >
-                  <div class="role-name">门诊医生</div>
-                  <div class="role-desc">
-                    主要负责挂号状态追踪、接诊问诊、电子病历处方开立
-                  </div>
-                </div>
-                <div
-                  class="role-item"
-                  :class="{ active: activeRole === 'registrar' }"
-                  @click="activeRole = 'registrar'"
-                >
-                  <div class="role-name">挂号收费员</div>
-                  <div class="role-desc">
-                    负责窗口门诊挂号、就诊追踪以及财务缴费结算
-                  </div>
-                </div>
-                <div
-                  class="role-item"
-                  :class="{ active: activeRole === 'pharmacist' }"
-                  @click="activeRole = 'pharmacist'"
-                >
-                  <div class="role-name">药房管理员</div>
-                  <div class="role-desc">
-                    负责配药发药流程管控与库房药品盘点入库
-                  </div>
-                </div>
-                <div
-                  class="role-item"
-                  :class="{ active: activeRole === 'manager' }"
-                  @click="activeRole = 'manager'"
-                >
-                  <div class="role-name">医院运营主管</div>
-                  <div class="role-desc">
-                    只读调取全院财务、医生、药品的综合统计分析报表
+                  <div class="role-name">{{ role.label }}</div>
+                  <div class="role-desc">{{ role.description }}</div>
+                  <div class="role-count">
+                    已配置 {{ roleMatrix[role.code]?.length || 0 }} 项权限
                   </div>
                 </div>
               </div>
             </el-col>
             <el-col :span="16">
-              <h4 class="section-title">2. 请在左侧选择一个角色以配置权限</h4>
-              <el-card shadow="never" class="permission-card">
+              <div class="permission-header">
+                <div>
+                  <h4 class="section-title">2. 配置权限矩阵</h4>
+                  <p class="permission-subtitle">
+                    当前角色：{{ activeRoleInfo?.label || "未选择" }}
+                  </p>
+                </div>
+                <div>
+                  <el-button @click="resetToDefault" :disabled="!activeRole"
+                    >恢复默认</el-button
+                  >
+                  <el-button
+                    type="primary"
+                    :loading="savingPermissions"
+                    :disabled="!activeRole"
+                    @click="savePermissions"
+                    >保存配置</el-button
+                  >
+                </div>
+              </div>
+              <el-card shadow="never" class="permission-card" v-loading="loadingPermissions">
                 <el-empty v-if="!activeRole" description="请选择角色" />
-                <div v-else class="permission-tree-placeholder">
-                  <!-- 此处未来可使用 el-tree 渲染对应角色的菜单与接口权限树 -->
+                <div v-else>
                   <el-alert
-                    title="权限矩阵配置区"
+                    title="勾选该角色允许访问的菜单和业务操作"
                     type="info"
-                    :description="`当前正在为【${activeRole}】配置细粒度权限（含菜单访问、接口调用权限），该功能待后端 API 对接后激活。`"
+                    :description="`保存后会写入角色权限矩阵表。当前已选择 ${checkedPermissionCount} / ${permissionLeafCount} 项权限。`"
                     show-icon
                     :closable="false"
                   />
+                  <el-tree
+                    ref="permissionTreeRef"
+                    class="permission-tree"
+                    :data="permissionTree"
+                    show-checkbox
+                    node-key="id"
+                    default-expand-all
+                    :props="{ label: 'label', children: 'children' }"
+                    @check="syncCheckedPermissions"
+                  >
+                    <template #default="{ data }">
+                      <div class="permission-node">
+                        <span>{{ data.label }}</span>
+                        <el-tag v-if="data.type" size="small" effect="plain">{{
+                          data.type
+                        }}</el-tag>
+                      </div>
+                    </template>
+                  </el-tree>
                 </div>
               </el-card>
             </el-col>
@@ -194,7 +209,9 @@
             <span class="log-desc"
               >实时监控 Spring Security 全局拦截与敏感操作审计日志</span
             >
-            <el-button type="danger" plain size="small">清空日志</el-button>
+            <el-button type="danger" plain size="small" @click="clearLogs"
+              >清空日志</el-button
+            >
           </div>
 
           <el-table
@@ -254,11 +271,134 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <el-dialog
+      v-model="accountDialogVisible"
+      title="新增职工账号"
+      width="520px"
+      destroy-on-close
+    >
+      <el-form
+        ref="accountFormRef"
+        :model="accountForm"
+        :rules="accountRules"
+        label-width="96px"
+      >
+        <el-form-item label="职工工号" prop="username">
+          <el-input v-model.trim="accountForm.username" placeholder="请输入登录工号" />
+        </el-form-item>
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model.trim="accountForm.name" placeholder="请输入职工姓名" />
+        </el-form-item>
+        <el-form-item label="初始密码" prop="password">
+          <el-input
+            v-model="accountForm.password"
+            placeholder="请输入初始密码"
+            show-password
+          />
+        </el-form-item>
+        <el-form-item label="业务角色" prop="role">
+          <el-select v-model="accountForm.role" placeholder="请选择角色" style="width: 100%">
+            <el-option
+              v-for="role in roleDefinitions"
+              :key="role.code"
+              :label="role.label"
+              :value="role.code"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="accountDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingAccount" @click="submitAccount"
+          >创建账号</el-button
+        >
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="roleDialogVisible"
+      title="修改职工角色"
+      width="480px"
+      destroy-on-close
+    >
+      <el-form label-width="96px">
+        <el-form-item label="职工工号">
+          <span>{{ currentAccount?.empNo }}</span>
+        </el-form-item>
+        <el-form-item label="姓名">
+          <span>{{ currentAccount?.name }}</span>
+        </el-form-item>
+        <el-form-item label="系统角色">
+          <el-select
+            v-model="roleForm.roles"
+            multiple
+            placeholder="请选择角色"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="role in roleDefinitions"
+              :key="role.code"
+              :label="role.label"
+              :value="role.code"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="roleDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingRole" @click="submitRoleChange"
+          >保存角色</el-button
+        >
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="passwordDialogVisible"
+      title="重置密码"
+      width="460px"
+      destroy-on-close
+    >
+      <el-alert
+        type="warning"
+        show-icon
+        :closable="false"
+        title="重置后请及时通知该职工使用新密码登录。"
+        style="margin-bottom: 16px"
+      />
+      <el-form
+        ref="passwordFormRef"
+        :model="passwordForm"
+        :rules="passwordRules"
+        label-width="96px"
+      >
+        <el-form-item label="职工工号">
+          <span>{{ currentAccount?.empNo }}</span>
+        </el-form-item>
+        <el-form-item label="新密码" prop="password">
+          <el-input
+            v-model="passwordForm.password"
+            placeholder="请输入新密码"
+            show-password
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button
+          type="warning"
+          :loading="savingPassword"
+          @click="submitResetPassword"
+          >确认重置</el-button
+        >
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, computed, nextTick, onMounted } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import request from "../../utils/request";
 
 const activeTab = ref("accounts");
@@ -267,6 +407,45 @@ const loading = ref(false);
 // ===== 账户管理数据 =====
 const accountQuery = reactive({ keyword: "", role: "" });
 const accountList = ref([]);
+const accountDialogVisible = ref(false);
+const roleDialogVisible = ref(false);
+const passwordDialogVisible = ref(false);
+const savingAccount = ref(false);
+const savingRole = ref(false);
+const savingPassword = ref(false);
+const accountFormRef = ref();
+const passwordFormRef = ref();
+const currentAccount = ref(null);
+const accountForm = reactive({
+  username: "",
+  name: "",
+  password: "123456",
+  role: "DOCTOR",
+});
+const roleForm = reactive({
+  roles: [],
+});
+const passwordForm = reactive({
+  password: "",
+});
+const accountRules = {
+  username: [
+    { required: true, message: "请输入职工工号", trigger: "blur" },
+    { pattern: /^[A-Za-z0-9_-]{3,20}$/, message: "工号需为3-20位字母、数字、下划线或短横线", trigger: "blur" },
+  ],
+  name: [{ required: true, message: "请输入姓名", trigger: "blur" }],
+  password: [
+    { required: true, message: "请输入初始密码", trigger: "blur" },
+    { min: 6, max: 32, message: "密码长度需为6-32位", trigger: "blur" },
+  ],
+  role: [{ required: true, message: "请选择业务角色", trigger: "change" }],
+};
+const passwordRules = {
+  password: [
+    { required: true, message: "请输入新密码", trigger: "blur" },
+    { min: 6, max: 32, message: "密码长度需为6-32位", trigger: "blur" },
+  ],
+};
 
 const roleLabel = (role) => {
   const map = {
@@ -300,14 +479,109 @@ const fetchAccounts = async () => {
       },
     });
     accountList.value = (res || []).map((user) => ({
+      id: user.id,
       empNo: user.username,
       name: user.name,
       department: "--",
-      role: roleLabel(user.roles?.[0]),
+      role: (user.roles || []).map(roleLabel).join("、") || "未分配",
+      roles: [...(user.roles || [])],
       status: user.enabled === "Y" ? 1 : 0,
     }));
   } finally {
     loading.value = false;
+  }
+};
+
+const resetAccountForm = () => {
+  Object.assign(accountForm, {
+    username: "",
+    name: "",
+    password: "123456",
+    role: "DOCTOR",
+  });
+};
+
+const openCreateAccountDialog = () => {
+  resetAccountForm();
+  accountDialogVisible.value = true;
+};
+
+const submitAccount = async () => {
+  await accountFormRef.value?.validate();
+  savingAccount.value = true;
+  try {
+    await request.post("/api/auth/users", {
+      username: accountForm.username,
+      name: accountForm.name,
+      password: accountForm.password,
+      role: accountForm.role,
+    });
+    ElMessage.success("职工账号创建成功");
+    accountDialogVisible.value = false;
+    fetchAccounts();
+  } finally {
+    savingAccount.value = false;
+  }
+};
+
+const openRoleDialog = (row) => {
+  currentAccount.value = row;
+  roleForm.roles = [...(row.roles || [])];
+  roleDialogVisible.value = true;
+};
+
+const submitRoleChange = async () => {
+  if (!roleForm.roles.length) {
+    ElMessage.warning("请至少选择一个角色");
+    return;
+  }
+  savingRole.value = true;
+  try {
+    await request.post(`/api/auth/${currentAccount.value.id}/roles`, roleForm.roles);
+    ElMessage.success("角色修改成功");
+    roleDialogVisible.value = false;
+    fetchAccounts();
+  } finally {
+    savingRole.value = false;
+  }
+};
+
+const openResetPasswordDialog = (row) => {
+  currentAccount.value = row;
+  passwordForm.password = "123456";
+  passwordDialogVisible.value = true;
+};
+
+const submitResetPassword = async () => {
+  await passwordFormRef.value?.validate();
+  await ElMessageBox.confirm(
+    `确认将 ${currentAccount.value.name}（${currentAccount.value.empNo}）的密码重置吗？`,
+    "重置密码确认",
+    {
+      confirmButtonText: "确认重置",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  );
+  savingPassword.value = true;
+  try {
+    await request.put(`/api/auth/users/${currentAccount.value.id}/password`, {
+      password: passwordForm.password,
+    });
+    ElMessage.success("密码已重置");
+    passwordDialogVisible.value = false;
+  } finally {
+    savingPassword.value = false;
+  }
+};
+
+const handleAccountStatusChange = async (row) => {
+  const enabled = row.status === 1;
+  try {
+    await request.put(`/api/auth/users/${row.id}/enabled`, { enabled });
+    ElMessage.success(enabled ? "账户已启用" : "账户已停用");
+  } catch (error) {
+    row.status = enabled ? 0 : 1;
   }
 };
 
@@ -322,8 +596,167 @@ const getRoleType = (role) => {
   return map[role] || "info";
 };
 
-// ===== 角色管理数据 =====
-const activeRole = ref("");
+// ===== 角色权限矩阵数据 =====
+const activeRole = ref("ADMIN");
+const loadingPermissions = ref(false);
+const savingPermissions = ref(false);
+const permissionTreeRef = ref();
+const roleMatrix = reactive({});
+const defaultRoleMatrix = reactive({});
+const checkedPermissions = ref([]);
+
+const roleDefinitions = [
+  {
+    code: "ADMIN",
+    label: "系统管理员",
+    description: "拥有全院系统配置及底层基础支撑最高权限",
+  },
+  {
+    code: "DOCTOR",
+    label: "门诊医生",
+    description: "负责排班查看、接诊问诊、电子病历与处方开立",
+  },
+  {
+    code: "REGISTRAR",
+    label: "挂号收费员",
+    description: "负责门诊挂号、患者就诊追踪与收费协同",
+  },
+  {
+    code: "PHARMACY_ADMIN",
+    label: "药房管理员",
+    description: "负责处方审核、配药发药与药品库存维护",
+  },
+  {
+    code: "FINANCE",
+    label: "财务人员",
+    description: "负责费用结算、财务管理与收支统计报表",
+  },
+];
+
+const permissionTree = [
+  {
+    id: "dashboard",
+    label: "数据看板",
+    children: [{ id: "dashboard:view", label: "查看数据看板", type: "菜单" }],
+  },
+  {
+    id: "patient",
+    label: "患者管理",
+    children: [
+      { id: "patient:registration:view", label: "查看门诊挂号", type: "菜单" },
+      { id: "patient:registration:create", label: "新增门诊挂号", type: "操作" },
+      { id: "patient:tracking:view", label: "查看就诊状态追踪", type: "菜单" },
+    ],
+  },
+  {
+    id: "doctor",
+    label: "医生工作站",
+    children: [
+      { id: "doctor:schedule:view", label: "查看人员排班", type: "菜单" },
+      { id: "doctor:schedule:manage", label: "新增/编辑/删除排班", type: "操作" },
+      { id: "doctor:consultation:view", label: "进入接诊问诊", type: "菜单" },
+      { id: "doctor:record:write", label: "书写电子病历", type: "操作" },
+      { id: "doctor:prescription:write", label: "开立处方", type: "操作" },
+    ],
+  },
+  {
+    id: "pharmacy",
+    label: "药房管理",
+    children: [
+      { id: "pharmacy:prescription:review", label: "处方审核", type: "操作" },
+      { id: "pharmacy:dispense", label: "确认发药", type: "操作" },
+      { id: "pharmacy:drug:view", label: "查看药品字典与库存", type: "菜单" },
+      { id: "pharmacy:drug:manage", label: "新增/编辑/入库药品", type: "操作" },
+    ],
+  },
+  {
+    id: "finance",
+    label: "财务管理",
+    children: [
+      { id: "finance:billing:view", label: "查看收费记录", type: "菜单" },
+      { id: "finance:billing:manage", label: "处理收费结算", type: "操作" },
+    ],
+  },
+  {
+    id: "analytics",
+    label: "统计分析",
+    children: [
+      { id: "analytics:workload:view", label: "查看工作量统计", type: "报表" },
+      { id: "analytics:revenue:view", label: "查看财务收支报表", type: "报表" },
+      { id: "analytics:drug:view", label: "查看药品消耗排行", type: "报表" },
+    ],
+  },
+  {
+    id: "system",
+    label: "权限与基础支撑",
+    children: [
+      { id: "system:user:manage", label: "维护职工账户", type: "操作" },
+      { id: "system:role:manage", label: "配置角色权限矩阵", type: "操作" },
+      { id: "system:audit:view", label: "查看系统审计日志", type: "菜单" },
+    ],
+  },
+];
+
+const permissionLeafCodes = permissionTree.flatMap((group) =>
+  group.children.map((item) => item.id),
+);
+const permissionLeafCount = permissionLeafCodes.length;
+const checkedPermissionCount = computed(() => checkedPermissions.value.length);
+const activeRoleInfo = computed(() =>
+  roleDefinitions.find((role) => role.code === activeRole.value),
+);
+
+const setTreeCheckedKeys = async (keys) => {
+  checkedPermissions.value = [...keys];
+  await nextTick();
+  permissionTreeRef.value?.setCheckedKeys([...keys]);
+};
+
+const fetchRoleMatrix = async () => {
+  loadingPermissions.value = true;
+  try {
+    const [matrix, defaults] = await Promise.all([
+      request.get("/api/auth/role-permissions"),
+      request.get("/api/auth/role-permissions/defaults"),
+    ]);
+    roleDefinitions.forEach((role) => {
+      roleMatrix[role.code] = [...(matrix?.[role.code] || [])];
+      defaultRoleMatrix[role.code] = [...(defaults?.[role.code] || [])];
+    });
+    await selectRole(activeRole.value);
+  } finally {
+    loadingPermissions.value = false;
+  }
+};
+
+const selectRole = async (roleCode) => {
+  activeRole.value = roleCode;
+  await setTreeCheckedKeys(roleMatrix[roleCode] || []);
+};
+
+const syncCheckedPermissions = () => {
+  checkedPermissions.value = permissionTreeRef.value?.getCheckedKeys(true) || [];
+};
+
+const savePermissions = async () => {
+  syncCheckedPermissions();
+  savingPermissions.value = true;
+  try {
+    await request.put(
+      `/api/auth/role-permissions/${activeRole.value}`,
+      checkedPermissions.value,
+    );
+    roleMatrix[activeRole.value] = [...checkedPermissions.value];
+    ElMessage.success("角色权限矩阵已保存");
+  } finally {
+    savingPermissions.value = false;
+  }
+};
+
+const resetToDefault = async () => {
+  await setTreeCheckedKeys(defaultRoleMatrix[activeRole.value] || []);
+  ElMessage.info("已恢复为默认权限，点击保存后生效");
+};
 
 // ===== 审计日志数据 =====
 const auditLogs = ref([]);
@@ -340,8 +773,24 @@ const fetchLogs = async () => {
   }));
 };
 
+const clearLogs = async () => {
+  await ElMessageBox.confirm(
+    "确认清空系统安全审计日志吗？该操作会保留一条清空记录用于追溯。",
+    "清空日志确认",
+    {
+      confirmButtonText: "确认清空",
+      cancelButtonText: "取消",
+      type: "warning",
+    },
+  );
+  await request.delete("/api/audit/logs");
+  ElMessage.success("日志已清空");
+  fetchLogs();
+};
+
 onMounted(() => {
   fetchAccounts();
+  fetchRoleMatrix();
   fetchLogs();
 });
 </script>
@@ -423,9 +872,37 @@ onMounted(() => {
   color: #909399;
   line-height: 1.5;
 }
+.role-count {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #409eff;
+}
+.permission-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+}
+.permission-subtitle {
+  margin: -8px 0 0;
+  font-size: 13px;
+  color: #909399;
+}
 .permission-card {
   min-height: 450px;
   background-color: #fafafa;
+}
+.permission-tree {
+  margin-top: 16px;
+  padding: 8px 0;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+}
+.permission-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* 审计日志样式 */

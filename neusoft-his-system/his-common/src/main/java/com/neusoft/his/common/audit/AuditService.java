@@ -6,4 +6,6 @@ public interface AuditService {
     void log(String operation, String detail);
 
     List<AuditLogEntry> list();
+
+    void clear();
 }

@@ -31,6 +31,12 @@ public class AuthController {
         return ApiResponse.ok("登录成功", authService.login(req));
     }
 
+    @PostMapping("/users")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<Long> createStaff(@RequestBody AuthRequest req) {
+        return ApiResponse.ok("职工账号创建成功", authService.createStaff(req));
+    }
+
     @PostMapping("/{userId}/roles")
     @RequireRoles({RoleCode.ADMIN})
     public ApiResponse<Void> assignRoles(@PathVariable Long userId, @RequestBody Set<String> roles) {
@@ -43,5 +49,44 @@ public class AuthController {
     public ApiResponse<List<Map<String, Object>>> users(@RequestParam(required = false) String keyword,
                                                         @RequestParam(required = false) String role) {
         return ApiResponse.ok(authService.listUsers(keyword, role));
+    }
+
+    @PutMapping("/users/{userId}/password")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<Void> resetPassword(@PathVariable Long userId, @RequestBody Map<String, String> payload) {
+        authService.resetPassword(userId, payload == null ? null : payload.get("password"));
+        return ApiResponse.ok("密码已重置", null);
+    }
+
+    @PutMapping("/users/{userId}/enabled")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<Void> updateEnabled(@PathVariable Long userId, @RequestBody Map<String, Boolean> payload) {
+        authService.updateEnabled(userId, payload != null && Boolean.TRUE.equals(payload.get("enabled")));
+        return ApiResponse.ok("账户状态已更新", null);
+    }
+
+    @GetMapping("/role-permissions")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<Map<String, Set<String>>> rolePermissions() {
+        return ApiResponse.ok(authService.rolePermissions());
+    }
+
+    @GetMapping("/role-permissions/defaults")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<Map<String, Set<String>>> defaultRolePermissions() {
+        return ApiResponse.ok(authService.defaultRolePermissions());
+    }
+
+    @GetMapping("/role-permissions/{role}")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<Set<String>> rolePermissions(@PathVariable String role) {
+        return ApiResponse.ok(authService.rolePermissions(role));
+    }
+
+    @PutMapping("/role-permissions/{role}")
+    @RequireRoles({RoleCode.ADMIN})
+    public ApiResponse<Void> saveRolePermissions(@PathVariable String role, @RequestBody Set<String> permissions) {
+        authService.saveRolePermissions(role, permissions);
+        return ApiResponse.ok("角色权限配置已保存", null);
     }
 }

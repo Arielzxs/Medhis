@@ -24,22 +24,32 @@
         <el-card shadow="never" class="quick-action-card">
           <div class="action-buttons">
             <el-button
+              v-if="hasAnyRole(['REGISTRAR'])"
               type="primary"
               size="large"
               @click="$router.push('/patient/registration')"
               >快捷挂号</el-button
             >
             <el-button
+              v-if="hasAnyRole(['FINANCE'])"
               type="success"
               size="large"
               @click="$router.push('/finance')"
               >门诊收费</el-button
             >
             <el-button
+              v-if="hasAnyRole(['PHARMACY_ADMIN'])"
               type="warning"
               size="large"
               @click="$router.push('/pharmacy')"
               >发药工作台</el-button
+            >
+            <el-button
+              v-if="hasAnyRole(['DOCTOR'])"
+              type="primary"
+              size="large"
+              @click="$router.push('/doctor/consultation')"
+              >接诊问诊</el-button
             >
           </div>
         </el-card>
@@ -171,19 +181,34 @@ const currentDate = computed(() => {
 const tasks = ref([]);
 const logs = ref([]);
 
+const hasRole = (role) => userStore.roles.includes("ADMIN") || userStore.roles.includes(role);
+const hasAnyRole = (roles) =>
+  userStore.roles.includes("ADMIN") || roles.some((role) => userStore.roles.includes(role));
+
 const fetchDashboardData = async () => {
   loading.value = true;
   try {
-    const [dashboard, registrations, warnings, reports, auditLogs] =
-      await Promise.all([
-        request.get("/api/analytics/dashboard"),
-        request.get("/api/patients/registrations", {
-          params: { page: 1, size: 200 },
-        }),
-        request.get("/api/pharmacy/inventory/warnings"),
-        request.get("/api/finance/reports", { params: { page: 1, size: 200 } }),
-        request.get("/api/audit/logs"),
-      ]);
+    const [
+      dashboard,
+      registrations,
+      warnings,
+      reports,
+      auditLogs,
+    ] = await Promise.all([
+      hasRole("ADMIN") ? request.get("/api/analytics/dashboard") : Promise.resolve({}),
+      hasAnyRole(["REGISTRAR", "DOCTOR", "FINANCE"])
+        ? request.get("/api/patients/registrations", {
+            params: { page: 1, size: 200 },
+          })
+        : Promise.resolve({ records: [] }),
+      hasRole("PHARMACY_ADMIN")
+        ? request.get("/api/pharmacy/inventory/warnings")
+        : Promise.resolve([]),
+      hasRole("FINANCE")
+        ? request.get("/api/finance/reports", { params: { page: 1, size: 200 } })
+        : Promise.resolve({ records: [] }),
+      hasRole("ADMIN") ? request.get("/api/audit/logs") : Promise.resolve([]),
+    ]);
 
     const today = new Date().toISOString().slice(0, 10);
     const regRecords = registrations.records || [];
@@ -198,27 +223,48 @@ const fetchDashboardData = async () => {
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
     stats.stockWarnings = warnings.length || 0;
 
-    tasks.value = [
-      ...(warnings || []).slice(0, 3).map((drug) => ({
+    const warningTasks = hasRole("PHARMACY_ADMIN")
+      ? (warnings || []).slice(0, 3).map((drug) => ({
         name: `${drug.name} 库存低于预警线`,
         time: drug.updatedAt || drug.createdAt || "刚刚",
         status: "待处理",
         type: "warning",
-      })),
-      {
+      }))
+      : [];
+    const auditTask = hasRole("ADMIN")
+      ? [{
         name: `审计日志累计 ${dashboard.auditLogCount || 0} 条`,
         time: "实时",
         status: "进行中",
         type: "info",
-      },
+      }]
+      : [];
+    tasks.value = [
+      ...warningTasks,
+      ...auditTask,
+      ...(warningTasks.length || auditTask.length
+        ? []
+        : [{
+            name: "暂无待办事项",
+            time: "实时",
+            status: "正常",
+            type: "success",
+          }]),
     ];
 
-    logs.value = (auditLogs || []).slice(0, 5).map((log) => ({
-      content: `${log.operation || "系统操作"}：${log.detail || ""}`,
-      time: log.time,
-      type: "primary",
-      color: "#409eff",
-    }));
+    logs.value = hasRole("ADMIN")
+      ? (auditLogs || []).slice(0, 5).map((log) => ({
+          content: `${log.operation || "系统操作"}：${log.detail || ""}`,
+          time: log.time,
+          type: "primary",
+          color: "#409eff",
+        }))
+      : [{
+          content: "欢迎使用东软云医院 HIS 系统",
+          time: "实时",
+          type: "success",
+          color: "#67c23a",
+        }];
   } catch (error) {
     console.error(error);
   } finally {

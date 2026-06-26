@@ -12,9 +12,11 @@ import com.neusoft.his.dal.entity.Supplier;
 import com.neusoft.his.dal.mapper.DrugCatalogMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
 import com.neusoft.his.dal.mapper.SupplierMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -35,6 +37,26 @@ public class PharmacyService {
 
     @Transactional(rollbackFor = Exception.class)
     public DrugCatalog saveDrug(DrugCatalog drug) {
+        validateDrug(drug);
+        drug.setCode(drug.getCode().trim());
+        drug.setName(drug.getName().trim());
+        if (drug.getUnit() != null) {
+            drug.setUnit(drug.getUnit().trim());
+        }
+
+        QueryWrapper<DrugCatalog> duplicate = new QueryWrapper<DrugCatalog>().eq("code", drug.getCode());
+        if (drug.getId() != null) {
+            duplicate.ne("id", drug.getId());
+        }
+        if (drugMapper.selectCount(duplicate) > 0) {
+            throw new BizException("药品编码已存在");
+        }
+        if (drug.getStock() == null) {
+            drug.setStock(0);
+        }
+        if (drug.getWarningThreshold() == null) {
+            drug.setWarningThreshold(0);
+        }
         if (drug.getId() == null) {
             drug.setCreatedAt(LocalDateTime.now());
             drugMapper.insert(drug);
@@ -42,7 +64,29 @@ public class PharmacyService {
             drug.setUpdatedAt(LocalDateTime.now());
             drugMapper.updateById(drug);
         }
+        auditService.log("DRUG_SAVE", "药品: " + drug.getCode() + " " + drug.getName());
         return drug;
+    }
+
+    private void validateDrug(DrugCatalog drug) {
+        if (StringUtils.isBlank(drug.getCode())) {
+            throw new BizException("药品编码不能为空");
+        }
+        if (StringUtils.isBlank(drug.getName())) {
+            throw new BizException("药品名称不能为空");
+        }
+        if (StringUtils.isBlank(drug.getUnit())) {
+            throw new BizException("药品单位不能为空");
+        }
+        if (drug.getPrice() == null || drug.getPrice().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BizException("药品价格不能小于0");
+        }
+        if (drug.getStock() != null && drug.getStock() < 0) {
+            throw new BizException("药品库存不能小于0");
+        }
+        if (drug.getWarningThreshold() != null && drug.getWarningThreshold() < 0) {
+            throw new BizException("库存预警线不能小于0");
+        }
     }
 
     @Transactional(rollbackFor = Exception.class)

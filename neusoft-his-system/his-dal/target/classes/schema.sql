@@ -46,6 +46,18 @@ CREATE TABLE IF NOT EXISTS doctor_profile (
     updated_at DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS doctor_schedule (
+    id BIGINT PRIMARY KEY,
+    doctor_id BIGINT NOT NULL,
+    schedule_date VARCHAR(32) NOT NULL,
+    shift VARCHAR(32) NOT NULL,
+    level VARCHAR(32),
+    registration_limit INT,
+    status INT,
+    created_at DATETIME,
+    updated_at DATETIME
+);
+
 CREATE TABLE IF NOT EXISTS medical_record (
     id BIGINT PRIMARY KEY,
     patient_id BIGINT NOT NULL,
@@ -121,6 +133,13 @@ CREATE TABLE IF NOT EXISTS sys_user_role (
     user_id BIGINT NOT NULL,
     role_code VARCHAR(32) NOT NULL,
     PRIMARY KEY (user_id, role_code)
+);
+
+-- 角色权限矩阵配置表
+CREATE TABLE IF NOT EXISTS sys_role_permission (
+    role_code VARCHAR(32) NOT NULL,
+    permission_code VARCHAR(64) NOT NULL,
+    PRIMARY KEY (role_code, permission_code)
 );
 
 -- 系统审计日志持久化表

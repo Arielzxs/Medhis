@@ -18,35 +18,32 @@
         class="el-menu-vertical"
       >
         <template v-for="route in menus" :key="route.path">
-          <template v-if="hasAuth(route.meta?.roles)">
-            <el-sub-menu
-              v-if="route.children && route.children.length > 0"
-              :index="'/' + route.path"
-            >
-              <template #title>
-                <el-icon v-if="route.meta?.icon"
-                  ><component :is="route.meta.icon"
-                /></el-icon>
-                <span>{{ route.meta?.title }}</span>
-              </template>
-
-              <template v-for="child in route.children" :key="child.path">
-                <el-menu-item
-                  v-if="hasAuth(child.meta?.roles)"
-                  :index="'/' + route.path + '/' + child.path"
-                >
-                  <template #title>{{ child.meta?.title }}</template>
-                </el-menu-item>
-              </template>
-            </el-sub-menu>
-
-            <el-menu-item v-else :index="'/' + route.path">
+          <el-sub-menu
+            v-if="route.children && route.children.length > 0"
+            :index="'/' + route.path"
+          >
+            <template #title>
               <el-icon v-if="route.meta?.icon"
                 ><component :is="route.meta.icon"
               /></el-icon>
-              <template #title>{{ route.meta?.title }}</template>
+              <span>{{ route.meta?.title }}</span>
+            </template>
+
+            <el-menu-item
+              v-for="child in route.children"
+              :key="child.path"
+              :index="'/' + route.path + '/' + child.path"
+            >
+              <template #title>{{ child.meta?.title }}</template>
             </el-menu-item>
-          </template>
+          </el-sub-menu>
+
+          <el-menu-item v-else :index="'/' + route.path">
+            <el-icon v-if="route.meta?.icon"
+              ><component :is="route.meta.icon"
+            /></el-icon>
+            <template #title>{{ route.meta?.title }}</template>
+          </el-menu-item>
         </template>
       </el-menu>
     </el-aside>
@@ -120,12 +117,21 @@ const isCollapse = ref(false);
 // 获取 layout 下的所有子路由作为菜单
 const menus = computed(() => {
   const layoutRoute = router.options.routes.find((r) => r.path === "/");
-  return layoutRoute ? layoutRoute.children : [];
+  if (!layoutRoute) return [];
+  return layoutRoute.children
+    .filter((route) => !route.hidden && hasAuth(route.meta?.roles))
+    .map((route) => {
+      if (!route.children?.length) return route;
+      const children = route.children.filter((child) => hasAuth(child.meta?.roles));
+      return { ...route, children };
+    })
+    .filter((route) => !route.children || route.children.length > 0);
 });
 
 // 检查当前用户是否有权限访问该路由
 const hasAuth = (roles) => {
   if (!roles) return true;
+  if (userStore.roles.includes("ADMIN")) return true;
   return roles.some((role) => userStore.roles.includes(role));
 };
 

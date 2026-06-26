@@ -5,6 +5,7 @@ import com.neusoft.his.common.audit.AuditLogEntry;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.security.RequireRoles;
 import com.neusoft.his.common.security.RoleCode;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,5 +25,11 @@ public class AuditController {
     @GetMapping("/logs")
     public ApiResponse<List<AuditLogEntry>> logs() {
         return ApiResponse.ok(auditService.list());
+    }
+
+    @DeleteMapping("/logs")
+    public ApiResponse<Void> clearLogs() {
+        auditService.clear();
+        return ApiResponse.ok("日志已清空", null);
     }
 }
