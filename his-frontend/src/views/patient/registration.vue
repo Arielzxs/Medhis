@@ -286,20 +286,25 @@ const doctorFee = (title = "") => {
 
 const fetchSchedules = async () => {
   const res = await request.get("/api/doctors/schedules", {
-    params: { department: scheduleQuery.department, page: 1, size: 100 },
+    params: {
+      department: scheduleQuery.department,
+      doctorName: scheduleQuery.doctorName,
+      date: scheduleQuery.date,
+      page: 1,
+      size: 100,
+    },
   });
   scheduleList.value = (res.records || [])
-    .filter((doctor) =>
-      scheduleQuery.doctorName ? doctor.name?.includes(scheduleQuery.doctorName) : true,
-    )
-    .map((doctor) => ({
-      id: doctor.id,
-      doctorName: doctor.name,
-      title: doctor.title || "普通医师",
-      department: doctor.department,
-      shift: doctor.attendanceStatus || "全天",
-      fee: doctorFee(doctor.title),
-      remain: doctor.attendanceStatus === "停诊" ? 0 : 50,
+    .map((schedule) => ({
+      id: schedule.id,
+      doctorId: schedule.doctorId,
+      scheduleDate: schedule.scheduleDate,
+      doctorName: schedule.doctorName || schedule.name,
+      title: schedule.title || "普通医师",
+      department: schedule.department,
+      shift: schedule.shift || schedule.attendanceStatus || "全天",
+      fee: doctorFee(schedule.title),
+      remain: schedule.status === 0 ? 0 : (schedule.remain ?? schedule.limit ?? 0),
     }));
   selectedScheduleId.value = null;
   selectedSchedule.value = null;
@@ -318,12 +323,9 @@ const submitRegistration = async () => {
   if (!patientForm.id) return ElMessage.warning("请先读取或保存患者档案");
   const reg = await request.post("/api/patients/registrations", {
     patientId: patientForm.id,
-    doctorId: selectedSchedule.value.id,
+    doctorId: selectedSchedule.value.doctorId,
     department: selectedSchedule.value.department,
-    scheduleDate:
-      scheduleQuery.date instanceof Date
-        ? scheduleQuery.date.toISOString().slice(0, 10)
-        : scheduleQuery.date || new Date().toISOString().slice(0, 10),
+    scheduleDate: selectedSchedule.value.scheduleDate || scheduleQuery.date || new Date().toISOString().slice(0, 10),
     fee: selectedSchedule.value.fee,
   });
   await request.post(`/api/patients/registrations/${reg.id}/pay`);

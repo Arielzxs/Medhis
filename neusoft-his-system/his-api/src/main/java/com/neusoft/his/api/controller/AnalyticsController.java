@@ -26,6 +26,7 @@ public class AnalyticsController {
     }
 
     @GetMapping("/doctor-workload")
+    @RequireRoles({RoleCode.ADMIN, RoleCode.DOCTOR})
     public ApiResponse<Map<String, Long>> doctorWorkload() {
         return ApiResponse.ok(service.doctorWorkload());
     }

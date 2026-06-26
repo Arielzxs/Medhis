@@ -38,4 +38,10 @@ public class DbAuditServiceImpl implements AuditService {
                 .map(log -> new AuditLogEntry(log.getTime(), log.getUsername(), log.getOperation(), log.getDetail()))
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public void clear() {
+        auditMapper.delete(null);
+        log("AUDIT_CLEAR", "清空系统审计日志");
+    }
 }

@@ -8,6 +8,21 @@ const request = axios.create({
   timeout: 10000,
 });
 
+let lastAuthErrorAt = 0;
+
+const showErrorOnce = (message) => {
+  const isAuthError =
+    message?.includes("无权限") ||
+    message?.includes("权限不足") ||
+    message?.includes("登录已过期");
+  if (isAuthError) {
+    const now = Date.now();
+    if (now - lastAuthErrorAt < 1500) return;
+    lastAuthErrorAt = now;
+  }
+  ElMessage.error(message || "操作失败");
+};
+
 // 请求拦截器：发送请求前自动加上 Token
 request.interceptors.request.use(
   (config) => {
@@ -31,17 +46,17 @@ request.interceptors.response.use(
     if (res.success) return res.data;
 
     // 如果 success 为 false，弹出后端的错误信息
-    ElMessage.error(res.message || "操作失败");
+    showErrorOnce(res.message || "操作失败");
     return Promise.reject(new Error(res.message || "Error"));
   },
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 403) {
-      ElMessage.error("权限不足或登录已过期，请重新登录");
+      showErrorOnce("权限不足或登录已过期，请重新登录");
       const userStore = useUserStore();
       userStore.logout();
       router.push("/login");
     } else {
-      ElMessage.error(error.message || "网络异常");
+      showErrorOnce(error.message || "网络异常");
     }
     return Promise.reject(error);
   },

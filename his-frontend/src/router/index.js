@@ -133,6 +133,11 @@ const router = createRouter({
 // 全局路由守卫（增加了对 /register 的放行检查）
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore();
+  const hasAuth = (roles) => {
+    if (!roles) return true;
+    if (userStore.roles.includes("ADMIN")) return true;
+    return roles.some((role) => userStore.roles.includes(role));
+  };
 
   // 1. 如果去登录或者注册页面，直接放行
   if (to.path === "/login" || to.path === "/register") {
@@ -144,10 +149,8 @@ router.beforeEach((to, from, next) => {
   }
   // 3. 有 Token，进行RBAC角色权限判定
   else {
-    if (
-      to.meta.roles &&
-      !to.meta.roles.some((r) => userStore.roles.includes(r))
-    ) {
+    const denied = to.matched.some((record) => !hasAuth(record.meta?.roles));
+    if (denied) {
       next("/dashboard");
     } else {
       next();

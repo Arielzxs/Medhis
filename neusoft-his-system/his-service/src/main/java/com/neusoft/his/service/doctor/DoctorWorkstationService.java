@@ -1,34 +1,47 @@
 package com.neusoft.his.service.doctor;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.DoctorProfile;
+import com.neusoft.his.dal.entity.DoctorSchedule;
 import com.neusoft.his.dal.entity.MedicalRecord;
+import com.neusoft.his.dal.entity.OutpatientRegistration;
 import com.neusoft.his.dal.entity.Prescription;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
+import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
+import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
+import com.neusoft.his.service.dto.DoctorScheduleView;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class DoctorWorkstationService {
     private final DoctorProfileMapper doctorMapper;
+    private final DoctorScheduleMapper scheduleMapper;
     private final MedicalRecordMapper recordMapper;
+    private final OutpatientRegistrationMapper registrationMapper;
     private final PrescriptionMapper prescriptionMapper;
     private final AuditService auditService;
 
-    public DoctorWorkstationService(DoctorProfileMapper doctorMapper, MedicalRecordMapper recordMapper,
+    public DoctorWorkstationService(DoctorProfileMapper doctorMapper, DoctorScheduleMapper scheduleMapper,
+                                    MedicalRecordMapper recordMapper, OutpatientRegistrationMapper registrationMapper,
                                     PrescriptionMapper prescriptionMapper, AuditService auditService) {
         this.doctorMapper = doctorMapper;
+        this.scheduleMapper = scheduleMapper;
         this.recordMapper = recordMapper;
+        this.registrationMapper = registrationMapper;
         this.prescriptionMapper = prescriptionMapper;
         this.auditService = auditService;
     }
@@ -46,14 +59,128 @@ public class DoctorWorkstationService {
         return doctor;
     }
 
-    public PageResponse<DoctorProfile> scheduleQuery(String department, long page, long size) {
-        Page<DoctorProfile> pageParam = new Page<>(page, size);
+    public List<DoctorProfile> listDoctors(String department) {
         QueryWrapper<DoctorProfile> query = new QueryWrapper<>();
         if (StringUtils.isNotBlank(department)) {
             query.eq("department", department);
         }
-        doctorMapper.selectPage(pageParam, query);
-        return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
+        query.orderByAsc("department").orderByAsc("name");
+        return doctorMapper.selectList(query);
+    }
+
+    public PageResponse<DoctorScheduleView> scheduleQuery(String department, String doctorName, String date,
+                                                          long page, long size) {
+        QueryWrapper<DoctorSchedule> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(date)) {
+            query.eq("schedule_date", date);
+        }
+        query.orderByDesc("schedule_date").orderByAsc("shift").orderByDesc("created_at");
+        List<DoctorSchedule> schedules = scheduleMapper.selectList(query);
+
+        Map<Long, DoctorProfile> doctors = schedules.stream()
+                .map(DoctorSchedule::getDoctorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.collectingAndThen(Collectors.toList(), ids -> {
+                    if (ids.isEmpty()) return Map.of();
+                    return doctorMapper.selectBatchIds(ids).stream()
+                            .collect(Collectors.toMap(DoctorProfile::getId, Function.identity()));
+                }));
+
+        List<DoctorScheduleView> filtered = schedules.stream()
+                .map(schedule -> toScheduleView(schedule, doctors.get(schedule.getDoctorId())))
+                .filter(item -> StringUtils.isBlank(department) || department.equals(item.department()))
+                .filter(item -> StringUtils.isBlank(doctorName) || StringUtils.contains(item.doctorName(), doctorName))
+                .toList();
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.max(size, 1);
+        int from = (int) Math.min((safePage - 1) * safeSize, filtered.size());
+        int to = (int) Math.min(from + safeSize, filtered.size());
+        return new PageResponse<>(safePage, safeSize, filtered.size(), filtered.subList(from, to));
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public DoctorSchedule saveSchedule(DoctorSchedule schedule) {
+        validateSchedule(schedule);
+        DoctorProfile doctor = doctorMapper.selectById(schedule.getDoctorId());
+        if (doctor == null) {
+            throw new BizException("医生不存在");
+        }
+        QueryWrapper<DoctorSchedule> duplicate = new QueryWrapper<DoctorSchedule>()
+                .eq("doctor_id", schedule.getDoctorId())
+                .eq("schedule_date", schedule.getScheduleDate())
+                .eq("shift", schedule.getShift());
+        if (schedule.getId() != null) {
+            duplicate.ne("id", schedule.getId());
+        }
+        if (scheduleMapper.selectCount(duplicate) > 0) {
+            throw new BizException("该医生当天该班次已存在排班");
+        }
+        if (schedule.getRegistrationLimit() == null) {
+            schedule.setRegistrationLimit(50);
+        }
+        if (schedule.getStatus() == null) {
+            schedule.setStatus(1);
+        }
+        if (schedule.getId() == null) {
+            schedule.setCreatedAt(LocalDateTime.now());
+            scheduleMapper.insert(schedule);
+        } else {
+            schedule.setUpdatedAt(LocalDateTime.now());
+            scheduleMapper.updateById(schedule);
+        }
+        auditService.log("DOCTOR_SCHEDULE_SAVE", "排班: " + doctor.getName() + " " + schedule.getScheduleDate() + " " + schedule.getShift());
+        return schedule;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteSchedule(Long id) {
+        DoctorSchedule schedule = scheduleMapper.selectById(id);
+        if (schedule == null) {
+            throw new BizException("排班不存在");
+        }
+        scheduleMapper.deleteById(id);
+        auditService.log("DOCTOR_SCHEDULE_DELETE", "删除排班: " + id);
+    }
+
+    private void validateSchedule(DoctorSchedule schedule) {
+        if (schedule.getDoctorId() == null) {
+            throw new BizException("请选择医生");
+        }
+        if (StringUtils.isBlank(schedule.getScheduleDate())) {
+            throw new BizException("请选择排班日期");
+        }
+        if (StringUtils.isBlank(schedule.getShift())) {
+            throw new BizException("请选择班次");
+        }
+        if (schedule.getRegistrationLimit() != null && schedule.getRegistrationLimit() < 0) {
+            throw new BizException("挂号限额不能小于0");
+        }
+    }
+
+    private DoctorScheduleView toScheduleView(DoctorSchedule schedule, DoctorProfile doctor) {
+        String title = doctor == null ? "" : doctor.getTitle();
+        int limit = schedule.getRegistrationLimit() == null ? 0 : schedule.getRegistrationLimit();
+        long used = registrationMapper.selectCount(new QueryWrapper<OutpatientRegistration>()
+                .eq("doctor_id", schedule.getDoctorId())
+                .eq("schedule_date", schedule.getScheduleDate()));
+        int remain = Math.max(limit - (int) used, 0);
+        String attendanceStatus = schedule.getStatus() != null && schedule.getStatus() == 0 ? "停诊" : schedule.getShift();
+        return new DoctorScheduleView(
+                schedule.getId(),
+                schedule.getDoctorId(),
+                schedule.getScheduleDate(),
+                schedule.getShift(),
+                doctor == null ? "" : doctor.getDepartment(),
+                doctor == null ? "" : doctor.getName(),
+                doctor == null ? "" : doctor.getName(),
+                title,
+                attendanceStatus,
+                schedule.getLevel(),
+                limit,
+                remain,
+                schedule.getStatus()
+        );
     }
 
     public String callPatient(Long patientId) {

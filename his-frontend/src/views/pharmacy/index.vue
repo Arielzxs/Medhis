@@ -297,7 +297,9 @@
                   @click="openInboundDialog(scope.row)"
                   >入库</el-button
                 >
-                <el-button type="info" link size="small">编辑</el-button>
+                <el-button type="info" link size="small" @click="handleEditDrug(scope.row)"
+                  >编辑</el-button
+                >
               </template>
             </el-table-column>
           </el-table>
@@ -390,6 +392,46 @@
         <span class="dialog-footer">
           <el-button @click="inboundDialogVisible = false">取 消</el-button>
           <el-button type="primary" @click="submitInbound">确认入库</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="drugDialogVisible"
+      :title="drugForm.id ? '编辑药品' : '新增药品'"
+      width="520px"
+      destroy-on-close
+    >
+      <el-form ref="drugFormRef" :model="drugForm" :rules="drugRules" label-width="96px">
+        <el-form-item label="药品编码" prop="code">
+          <el-input v-model.trim="drugForm.code" placeholder="例如：DRUG001" />
+        </el-form-item>
+        <el-form-item label="药品名称" prop="name">
+          <el-input v-model.trim="drugForm.name" placeholder="请输入药品名称" />
+        </el-form-item>
+        <el-form-item label="单位" prop="unit">
+          <el-select v-model="drugForm.unit" placeholder="请选择单位" filterable allow-create style="width: 100%">
+            <el-option label="盒" value="盒" />
+            <el-option label="瓶" value="瓶" />
+            <el-option label="支" value="支" />
+            <el-option label="片" value="片" />
+            <el-option label="袋" value="袋" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="零售价" prop="price">
+          <el-input-number v-model="drugForm.price" :min="0" :precision="2" :step="1" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="当前库存" prop="stock">
+          <el-input-number v-model="drugForm.stock" :min="0" :step="10" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="预警线" prop="warningThreshold">
+          <el-input-number v-model="drugForm.warningThreshold" :min="0" :step="10" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="drugDialogVisible = false">取 消</el-button>
+          <el-button type="primary" :loading="savingDrug" @click="submitDrug">保 存</el-button>
         </span>
       </template>
     </el-dialog>
@@ -547,8 +589,32 @@ const inventoryQuery = reactive({
 const drugList = ref([]);
 
 const inboundDialogVisible = ref(false);
+const drugDialogVisible = ref(false);
+const savingDrug = ref(false);
+const drugFormRef = ref();
 const currentDrug = ref(null);
 const inboundForm = reactive({ quantity: 50, supplier: "" });
+const drugForm = reactive({
+  id: null,
+  code: "",
+  name: "",
+  unit: "盒",
+  price: 0,
+  stock: 0,
+  warningThreshold: 20,
+});
+
+const drugRules = {
+  code: [
+    { required: true, message: "请输入药品编码", trigger: "blur" },
+    { pattern: /^[A-Za-z0-9_-]{2,32}$/, message: "编码只能包含字母、数字、下划线或短横线", trigger: "blur" },
+  ],
+  name: [{ required: true, message: "请输入药品名称", trigger: "blur" }],
+  unit: [{ required: true, message: "请选择单位", trigger: "change" }],
+  price: [{ required: true, message: "请输入零售价", trigger: "blur" }],
+  stock: [{ required: true, message: "请输入库存", trigger: "blur" }],
+  warningThreshold: [{ required: true, message: "请输入预警线", trigger: "blur" }],
+};
 
 const fetchDrugs = async () => {
   loadingInventory.value = true;
@@ -589,8 +655,58 @@ const filteredDrugList = computed(() => {
   return drugList.value;
 });
 
+const resetDrugForm = () => {
+  Object.assign(drugForm, {
+    id: null,
+    code: "",
+    name: "",
+    unit: "盒",
+    price: 0,
+    stock: 0,
+    warningThreshold: 20,
+  });
+};
+
 const handleAddDrug = () => {
-  ElMessage.success("跳转至新增药品表单");
+  resetDrugForm();
+  drugDialogVisible.value = true;
+};
+
+const handleEditDrug = (row) => {
+  Object.assign(drugForm, {
+    id: row.id,
+    code: row.drugCode,
+    name: row.drugName,
+    unit: row.unit || "盒",
+    price: row.price || 0,
+    stock: row.stock || 0,
+    warningThreshold: row.warningThreshold || 0,
+  });
+  drugDialogVisible.value = true;
+};
+
+const submitDrug = async () => {
+  await drugFormRef.value?.validate();
+  savingDrug.value = true;
+  try {
+    const payload = {
+      code: drugForm.code,
+      name: drugForm.name,
+      unit: drugForm.unit,
+      price: drugForm.price,
+      stock: drugForm.stock,
+      warningThreshold: drugForm.warningThreshold,
+    };
+    if (drugForm.id) {
+      payload.id = drugForm.id;
+    }
+    await request.post("/api/pharmacy/drugs", payload);
+    ElMessage.success(drugForm.id ? "药品信息已更新" : "药品新增成功");
+    drugDialogVisible.value = false;
+    fetchDrugs();
+  } finally {
+    savingDrug.value = false;
+  }
 };
 
 const openInboundDialog = (row) => {
