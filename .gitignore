@@ -11,3 +11,5 @@ neusoft-his-system/.m2repo/
 # IDE
 **/.idea/
 **/.vscode/
+~$*.docx
+/package-lock.json
