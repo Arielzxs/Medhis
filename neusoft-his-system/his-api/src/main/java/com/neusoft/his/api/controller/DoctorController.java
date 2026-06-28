@@ -2,8 +2,11 @@ package com.neusoft.his.api.controller;
 
 import com.neusoft.his.common.api.ApiResponse;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.common.security.RequireRoles;
 import com.neusoft.his.common.security.RoleCode;
+import com.neusoft.his.common.security.SecurityUser;
+import com.neusoft.his.common.security.SecurityUserHolder;
 import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.dal.entity.DoctorSchedule;
 import com.neusoft.his.dal.entity.MedicalRecord;
@@ -39,6 +42,29 @@ public class DoctorController {
     @Operation(summary = "保存医生档案", description = "新增或更新医生基础档案。")
     public ApiResponse<DoctorProfile> saveDoctor(@RequestBody DoctorProfile doctor) {
         return ApiResponse.ok(service.saveDoctor(doctor));
+    }
+
+    @GetMapping("/profiles")
+    @RequireRoles({RoleCode.ADMIN})
+    @Operation(summary = "查询医生档案", description = "管理员按科室、在岗状态和关键字维护医生业务档案。")
+    public ApiResponse<List<DoctorProfile>> profiles(@Parameter(description = "科室名称") @RequestParam(required = false) String department,
+                                                      @Parameter(description = "在岗状态") @RequestParam(required = false) String attendanceStatus,
+                                                      @Parameter(description = "姓名或专长关键字") @RequestParam(required = false) String keyword) {
+        return ApiResponse.ok(service.listDoctorProfiles(department, attendanceStatus, keyword));
+    }
+
+    @GetMapping("/me/profile")
+    @RequireRoles({RoleCode.DOCTOR})
+    @Operation(summary = "查询我的医生档案", description = "医生查看自己的业务档案。")
+    public ApiResponse<DoctorProfile> myProfile() {
+        return ApiResponse.ok(service.getOwnDoctorProfile(currentUserId()));
+    }
+
+    @PutMapping("/me/profile")
+    @RequireRoles({RoleCode.DOCTOR})
+    @Operation(summary = "更新我的医生档案", description = "医生仅可维护自己的专业特长，科室、职称和在岗状态由管理员维护。")
+    public ApiResponse<DoctorProfile> updateMyProfile(@RequestBody DoctorProfile doctor) {
+        return ApiResponse.ok("个人档案已更新", service.updateOwnDoctorProfile(currentUserId(), doctor));
     }
 
     @GetMapping("/schedules")
@@ -110,5 +136,13 @@ public class DoctorController {
             @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
             @Parameter(description = "每页条数，最大 50") @RequestParam(defaultValue = "10") long size) {
         return ApiResponse.ok(service.listPrescriptions(page, size));
+    }
+
+    private Long currentUserId() {
+        SecurityUser user = SecurityUserHolder.get();
+        if (user == null || user.userId() == null) {
+            throw new BizException("请先登录");
+        }
+        return user.userId();
     }
 }

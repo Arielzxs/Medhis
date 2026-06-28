@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
 @Service
 public class DoctorWorkstationService {
     private static final String DEFAULT_OUTPATIENT_DEPARTMENT = "\u5fc3\u8840\u7ba1\u5185\u79d1";
+    private static final String ACTIVE_ATTENDANCE_STATUS = "在岗";
 
     private final DoctorProfileMapper doctorMapper;
     private final DoctorScheduleMapper scheduleMapper;
@@ -57,6 +58,7 @@ public class DoctorWorkstationService {
 
     @Transactional(rollbackFor = Exception.class)
     public DoctorProfile saveDoctor(DoctorProfile doctor) {
+        validateDoctorProfile(doctor);
         if (doctor.getId() == null) {
             doctor.setCreatedAt(LocalDateTime.now());
             doctorMapper.insert(doctor);
@@ -71,8 +73,42 @@ public class DoctorWorkstationService {
     public List<DoctorProfile> listDoctors(String department) {
         QueryWrapper<DoctorProfile> query = new QueryWrapper<>();
         query.eq("department", normalizeDepartment(department));
+        query.eq("attendance_status", ACTIVE_ATTENDANCE_STATUS);
         query.orderByAsc("department").orderByAsc("name");
         return doctorMapper.selectList(query);
+    }
+
+    public List<DoctorProfile> listDoctorProfiles(String department, String attendanceStatus, String keyword) {
+        QueryWrapper<DoctorProfile> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(department)) {
+            query.eq("department", department.trim());
+        }
+        if (StringUtils.isNotBlank(attendanceStatus)) {
+            query.eq("attendance_status", attendanceStatus.trim());
+        }
+        if (StringUtils.isNotBlank(keyword)) {
+            query.and(wrapper -> wrapper.like("name", keyword.trim()).or().like("specialty", keyword.trim()));
+        }
+        query.orderByAsc("department").orderByAsc("name");
+        return doctorMapper.selectList(query);
+    }
+
+    public DoctorProfile getOwnDoctorProfile(Long userId) {
+        DoctorProfile profile = doctorMapper.selectOne(new QueryWrapper<DoctorProfile>().eq("user_id", userId));
+        if (profile == null) {
+            throw new BizException("医生档案不存在");
+        }
+        return profile;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public DoctorProfile updateOwnDoctorProfile(Long userId, DoctorProfile payload) {
+        DoctorProfile profile = getOwnDoctorProfile(userId);
+        profile.setSpecialty(StringUtils.defaultIfBlank(payload == null ? null : payload.getSpecialty(), "未填写"));
+        profile.setUpdatedAt(LocalDateTime.now());
+        doctorMapper.updateById(profile);
+        auditService.log("DOCTOR_PROFILE_SELF_UPDATE", "医生更新个人档案: user=" + userId);
+        return profile;
     }
 
     public PageResponse<DoctorScheduleView> scheduleQuery(String department, String doctorName, String date,
@@ -250,5 +286,26 @@ public class DoctorWorkstationService {
         query.orderByDesc("created_at");
         prescriptionMapper.selectPage(pageParam, query);
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
+    }
+
+    private void validateDoctorProfile(DoctorProfile doctor) {
+        if (doctor == null) {
+            throw new BizException("医生档案不能为空");
+        }
+        if (StringUtils.isBlank(doctor.getName())) {
+            throw new BizException("请输入医生姓名");
+        }
+        if (StringUtils.isBlank(doctor.getDepartment())) {
+            throw new BizException("请选择医生所属科室");
+        }
+        if (StringUtils.isBlank(doctor.getTitle())) {
+            throw new BizException("请选择医生职称");
+        }
+        if (StringUtils.isBlank(doctor.getAttendanceStatus())) {
+            throw new BizException("请选择医生在岗状态");
+        }
+        if (StringUtils.isBlank(doctor.getSpecialty())) {
+            doctor.setSpecialty("未填写");
+        }
     }
 }

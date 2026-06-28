@@ -5,9 +5,11 @@ import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.common.security.JwtTokenProvider;
 import com.neusoft.his.common.security.RoleCode;
+import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.dal.entity.SysRolePermission;
 import com.neusoft.his.dal.entity.SysUser;
 import com.neusoft.his.dal.entity.SysUserRole;
+import com.neusoft.his.dal.mapper.DoctorProfileMapper;
 import com.neusoft.his.dal.mapper.SysRolePermissionMapper;
 import com.neusoft.his.dal.mapper.SysUserMapper;
 import com.neusoft.his.dal.mapper.SysUserRoleMapper;
@@ -33,6 +35,11 @@ import java.util.stream.Collectors;
  */
 @Service
 public class AuthService {
+    private static final String PENDING_DEPARTMENT = "待分配";
+    private static final String DEFAULT_DOCTOR_TITLE = "医师";
+    private static final String DEFAULT_DOCTOR_SPECIALTY = "未填写";
+    private static final String PENDING_ATTENDANCE_STATUS = "待完善";
+
     private static final Set<String> ALL_ROLES = Set.of(
             RoleCode.ADMIN,
             RoleCode.DOCTOR,
@@ -106,16 +113,18 @@ public class AuthService {
     private final SysUserMapper sysUserMapper;
     private final SysUserRoleMapper sysUserRoleMapper;
     private final SysRolePermissionMapper sysRolePermissionMapper;
+    private final DoctorProfileMapper doctorProfileMapper;
     private final JwtTokenProvider tokenProvider;
     private final AuditService auditService;
     private final PasswordEncoder passwordEncoder;
 
     public AuthService(SysUserMapper sysUserMapper, SysUserRoleMapper sysUserRoleMapper,
-                       SysRolePermissionMapper sysRolePermissionMapper,
+                       SysRolePermissionMapper sysRolePermissionMapper, DoctorProfileMapper doctorProfileMapper,
                        AuditService auditService, JwtTokenProvider tokenProvider, PasswordEncoder passwordEncoder) {
         this.sysUserMapper = sysUserMapper;
         this.sysUserRoleMapper = sysUserRoleMapper;
         this.sysRolePermissionMapper = sysRolePermissionMapper;
+        this.doctorProfileMapper = doctorProfileMapper;
         this.auditService = auditService;
         this.tokenProvider = tokenProvider;
         this.passwordEncoder = passwordEncoder;
@@ -153,6 +162,7 @@ public class AuthService {
         userRole.setRoleCode(role);
         sysUserRoleMapper.insert(userRole);
 
+        createPendingDoctorProfileIfNeeded(role, user);
         auditService.log("REGISTER", "新用户注册: " + user.getUsername() + "，角色: " + role);
         return user.getId();
     }
@@ -187,8 +197,24 @@ public class AuthService {
         userRole.setRoleCode(role);
         sysUserRoleMapper.insert(userRole);
 
+        createPendingDoctorProfileIfNeeded(role, user);
         auditService.log("STAFF_CREATE", "新增职工账号: " + user.getUsername() + "，角色: " + role);
         return user.getId();
+    }
+
+    private void createPendingDoctorProfileIfNeeded(String role, SysUser user) {
+        if (!RoleCode.DOCTOR.equals(role)) {
+            return;
+        }
+        DoctorProfile profile = new DoctorProfile();
+        profile.setUserId(user.getId());
+        profile.setName(user.getName());
+        profile.setDepartment(PENDING_DEPARTMENT);
+        profile.setTitle(DEFAULT_DOCTOR_TITLE);
+        profile.setSpecialty(DEFAULT_DOCTOR_SPECIALTY);
+        profile.setAttendanceStatus(PENDING_ATTENDANCE_STATUS);
+        profile.setCreatedAt(LocalDateTime.now());
+        doctorProfileMapper.insert(profile);
     }
 
     public LoginResponse login(AuthRequest req) {
