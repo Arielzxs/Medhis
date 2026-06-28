@@ -46,7 +46,17 @@ coverage/
 target/
 target/
 **/target/
+# Maven 编译产物
+target/
+**/target/
+**/target/**
 
+# Java 编译文件
+*.class
+
+# IDEA 配置
+.idea/
+*.iml
 
 neusoft-his-system/.m2repo/
 *.class
