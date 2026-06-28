@@ -45,6 +45,7 @@ coverage/
 # Java / Maven backend
 target/
 **/target/
+
 neusoft-his-system/.m2repo/
 *.class
 *.jar
