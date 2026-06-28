@@ -8,7 +8,7 @@ import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.dal.entity.DoctorSchedule;
 import com.neusoft.his.dal.entity.MedicalRecord;
 import com.neusoft.his.dal.entity.Prescription;
-import com.neusoft.his.service.dto.DoctorScheduleView;
+import com.neusoft.his.dal.view.DoctorScheduleView;
 import com.neusoft.his.service.doctor.DoctorWorkstationService;
 import org.springframework.web.bind.annotation.*;
 

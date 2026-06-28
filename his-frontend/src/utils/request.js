@@ -5,7 +5,7 @@ import router from "../router";
 
 const request = axios.create({
   baseURL: "",
-  timeout: 10000,
+  timeout: 30000,
 });
 
 let lastAuthErrorAt = 0;

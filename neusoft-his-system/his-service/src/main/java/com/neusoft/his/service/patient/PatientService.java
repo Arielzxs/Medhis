@@ -16,11 +16,17 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class PatientService {
@@ -165,18 +171,48 @@ public class PatientService {
         }
         query.orderByDesc("created_at");
         registrationMapper.selectPage(pageParam, query);
+        Map<Long, Patient> patientMap = batchPatients(pageParam.getRecords());
+        Map<Long, DoctorProfile> doctorMap = batchDoctors(pageParam.getRecords());
 
         return new PageResponse<>(
                 pageParam.getCurrent(),
                 pageParam.getSize(),
                 pageParam.getTotal(),
-                pageParam.getRecords().stream().map(this::toRegistrationView).toList()
+                pageParam.getRecords().stream().map(reg -> toRegistrationView(reg, patientMap, doctorMap)).toList()
         );
     }
 
-    private Map<String, Object> toRegistrationView(OutpatientRegistration reg) {
-        Patient patient = patientMapper.selectById(reg.getPatientId());
-        DoctorProfile doctor = reg.getDoctorId() == null ? null : doctorMapper.selectById(reg.getDoctorId());
+    private Map<Long, Patient> batchPatients(List<OutpatientRegistration> records) {
+        List<Long> patientIds = records.stream()
+                .map(OutpatientRegistration::getPatientId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (patientIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return patientMapper.selectBatchIds(patientIds).stream()
+                .collect(Collectors.toMap(Patient::getId, Function.identity()));
+    }
+
+    private Map<Long, DoctorProfile> batchDoctors(List<OutpatientRegistration> records) {
+        List<Long> doctorIds = records.stream()
+                .map(OutpatientRegistration::getDoctorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (doctorIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return doctorMapper.selectBatchIds(doctorIds).stream()
+                .collect(Collectors.toMap(DoctorProfile::getId, Function.identity()));
+    }
+
+    private Map<String, Object> toRegistrationView(OutpatientRegistration reg,
+                                                   Map<Long, Patient> patientMap,
+                                                   Map<Long, DoctorProfile> doctorMap) {
+        Patient patient = patientMap.get(reg.getPatientId());
+        DoctorProfile doctor = reg.getDoctorId() == null ? null : doctorMap.get(reg.getDoctorId());
 
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("id", reg.getId());

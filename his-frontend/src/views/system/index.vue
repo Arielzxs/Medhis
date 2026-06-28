@@ -268,6 +268,18 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="logPage.page"
+              v-model:page-size="logPage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="logPage.total"
+              @current-change="fetchLogs"
+              @size-change="handleLogPageSizeChange"
+            />
+          </div>
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -760,10 +772,13 @@ const resetToDefault = async () => {
 
 // ===== 审计日志数据 =====
 const auditLogs = ref([]);
+const logPage = reactive({ page: 1, size: 10, total: 0 });
 
 const fetchLogs = async () => {
-  const res = await request.get("/api/audit/logs");
-  auditLogs.value = (res || []).map((log) => ({
+  const res = await request.get("/api/audit/logs", {
+    params: { page: logPage.page, size: logPage.size },
+  });
+  auditLogs.value = (res.records || []).map((log) => ({
     time: log.time,
     account: log.username || "--",
     ip: "--",
@@ -771,6 +786,12 @@ const fetchLogs = async () => {
     description: log.detail || "",
     status: "放行成功",
   }));
+  logPage.total = res.total || 0;
+};
+
+const handleLogPageSizeChange = () => {
+  logPage.page = 1;
+  fetchLogs();
 };
 
 const clearLogs = async () => {
@@ -820,6 +841,12 @@ onMounted(() => {
   font-size: 18px;
   font-weight: bold;
   color: #303133;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .system-tabs {

@@ -111,9 +111,20 @@ public class PharmacyService {
         auditService.log("DRUG_INBOUND", "入库 drug=" + drugId + " qty=" + quantity);
     }
 
-    public PageResponse<DrugCatalog> inventory(long page, long size) {
+    public PageResponse<DrugCatalog> inventory(String codeKeyword, String nameKeyword, Boolean warningOnly, long page, long size) {
         Page<DrugCatalog> pageParam = new Page<>(page, size);
-        drugMapper.selectPage(pageParam, null);
+        QueryWrapper<DrugCatalog> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(codeKeyword)) {
+            query.like("code", codeKeyword.trim());
+        }
+        if (StringUtils.isNotBlank(nameKeyword)) {
+            query.like("name", nameKeyword.trim());
+        }
+        if (Boolean.TRUE.equals(warningOnly)) {
+            query.apply("stock <= warning_threshold");
+        }
+        query.orderByAsc("code").orderByDesc("updated_at");
+        drugMapper.selectPage(pageParam, query);
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
     }
 

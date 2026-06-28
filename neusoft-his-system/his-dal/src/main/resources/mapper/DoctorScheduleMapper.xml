@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neusoft.his.dal.mapper.DoctorScheduleMapper">
+
+    <sql id="scheduleWhere">
+        <where>
+            <if test="date != null and date != ''">
+                AND ds.schedule_date = #{date}
+            </if>
+            <if test="department != null and department != ''">
+                AND dp.department = #{department}
+            </if>
+            <if test="doctorName != null and doctorName != ''">
+                AND dp.name LIKE CONCAT('%', #{doctorName}, '%')
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectSchedulePage" resultType="com.neusoft.his.dal.view.DoctorScheduleView">
+        SELECT
+            ds.id,
+            ds.doctor_id AS doctorId,
+            ds.schedule_date AS scheduleDate,
+            ds.shift,
+            dp.department,
+            dp.name AS doctorName,
+            dp.name AS name,
+            dp.title,
+            CASE WHEN ds.status = 0 THEN '停诊' ELSE ds.shift END AS attendanceStatus,
+            ds.level,
+            COALESCE(ds.registration_limit, 0) AS `limit`,
+            GREATEST(COALESCE(ds.registration_limit, 0) - COALESCE(reg.used_count, 0), 0) AS remain,
+            ds.status
+        FROM doctor_schedule ds
+        LEFT JOIN doctor_profile dp ON dp.id = ds.doctor_id
+        LEFT JOIN (
+            SELECT doctor_id, schedule_date, COUNT(*) AS used_count
+            FROM outpatient_registration
+            GROUP BY doctor_id, schedule_date
+        ) reg ON reg.doctor_id = ds.doctor_id AND reg.schedule_date = ds.schedule_date
+        <include refid="scheduleWhere"/>
+        ORDER BY ds.schedule_date DESC, ds.shift ASC, ds.created_at DESC
+    </select>
+
+    <select id="countSchedulePage" resultType="long">
+        SELECT COUNT(1)
+        FROM doctor_schedule ds
+        LEFT JOIN doctor_profile dp ON dp.id = ds.doctor_id
+        <include refid="scheduleWhere"/>
+    </select>
+</mapper>

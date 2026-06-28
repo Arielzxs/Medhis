@@ -144,11 +144,14 @@
 
       <div class="pagination-box">
         <el-pagination
+          v-model:page-size="queryParams.size"
           background
-          layout="total, prev, pager, next"
+          layout="total, sizes, prev, pager, next"
           :total="total"
           v-model:current-page="queryParams.page"
+          :page-sizes="[10, 20, 50]"
           @current-change="fetchRecords"
+          @size-change="handlePageSizeChange"
         />
       </div>
     </el-card>
@@ -167,6 +170,7 @@ const queryParams = reactive({
   dateRange: null,
   status: "",
   page: 1,
+  size: 10,
 });
 
 const tableData = ref([]);
@@ -181,15 +185,13 @@ const fetchRecords = async () => {
         id: id || undefined,
         status: queryParams.status || undefined,
         page: queryParams.page,
-        size: 10,
+        size: queryParams.size,
       },
     });
     tableData.value = (res.records || []).filter((item) =>
-      queryParams.patientName
-        ? item.patientName?.includes(queryParams.patientName)
-        : true,
+      queryParams.patientName ? item.patientName?.includes(queryParams.patientName) : true,
     );
-    total.value = res.total || tableData.value.length;
+    total.value = res.total || 0;
   } finally {
     loading.value = false;
   }
@@ -208,6 +210,12 @@ const getStatusType = (status) => {
 };
 
 const handleSearch = () => {
+  queryParams.page = 1;
+  fetchRecords();
+};
+
+const handlePageSizeChange = () => {
+  queryParams.page = 1;
   fetchRecords();
 };
 

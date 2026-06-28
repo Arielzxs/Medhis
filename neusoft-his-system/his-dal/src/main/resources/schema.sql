@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS patient (
     id_card VARCHAR(32),
     current_status VARCHAR(32),
     created_at DATETIME,
-    updated_at DATETIME
+    updated_at DATETIME,
+    INDEX idx_patient_name_no_idcard (name, patient_no, id_card)
 );
 
 CREATE TABLE IF NOT EXISTS outpatient_registration (
@@ -31,7 +32,9 @@ CREATE TABLE IF NOT EXISTS outpatient_registration (
     fee DECIMAL(12,2),
     paid CHAR(1),
     created_at DATETIME,
-    updated_at DATETIME
+    updated_at DATETIME,
+    INDEX idx_outpatient_registration_status_created (status, created_at),
+    INDEX idx_outpatient_registration_doctor_date (doctor_id, schedule_date)
 );
 
 CREATE TABLE IF NOT EXISTS doctor_profile (
@@ -55,7 +58,8 @@ CREATE TABLE IF NOT EXISTS doctor_schedule (
     registration_limit INT,
     status INT,
     created_at DATETIME,
-    updated_at DATETIME
+    updated_at DATETIME,
+    INDEX idx_doctor_schedule_date_doctor_shift (schedule_date, doctor_id, shift)
 );
 
 CREATE TABLE IF NOT EXISTS medical_record (
@@ -93,7 +97,8 @@ CREATE TABLE IF NOT EXISTS drug_catalog (
     stock INT,
     warning_threshold INT,
     created_at DATETIME,
-    updated_at DATETIME
+    updated_at DATETIME,
+    INDEX idx_drug_catalog_name_stock (name, stock, warning_threshold)
 );
 
 CREATE TABLE IF NOT EXISTS supplier (
@@ -115,7 +120,8 @@ CREATE TABLE IF NOT EXISTS billing_record (
     settlement_type VARCHAR(32),
     status VARCHAR(32),
     created_at DATETIME,
-    updated_at DATETIME
+    updated_at DATETIME,
+    INDEX idx_billing_record_status_created (status, created_at)
 );
 
 CREATE TABLE IF NOT EXISTS financial_transaction (
@@ -126,7 +132,8 @@ CREATE TABLE IF NOT EXISTS financial_transaction (
     status VARCHAR(32),
     remark VARCHAR(255),
     created_at DATETIME,
-    updated_at DATETIME
+    updated_at DATETIME,
+    INDEX idx_financial_transaction_created_direction (created_at, direction)
 );
 -- 用户角色关联表
 CREATE TABLE IF NOT EXISTS sys_user_role (
@@ -148,5 +155,6 @@ CREATE TABLE IF NOT EXISTS sys_audit_log (
     time DATETIME,
     username VARCHAR(64),
     operation VARCHAR(64),
-    detail TEXT
+    detail TEXT,
+    INDEX idx_sys_audit_log_time (time)
 );

@@ -1,16 +1,16 @@
 package com.neusoft.his.api.controller;
 
 import com.neusoft.his.common.api.ApiResponse;
+import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.audit.AuditLogEntry;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.security.RequireRoles;
 import com.neusoft.his.common.security.RoleCode;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/audit")
@@ -23,8 +23,9 @@ public class AuditController {
     }
 
     @GetMapping("/logs")
-    public ApiResponse<List<AuditLogEntry>> logs() {
-        return ApiResponse.ok(auditService.list());
+    public ApiResponse<PageResponse<AuditLogEntry>> logs(@RequestParam(defaultValue = "1") long page,
+                                                         @RequestParam(defaultValue = "10") long size) {
+        return ApiResponse.ok(auditService.page(page, size));
     }
 
     @DeleteMapping("/logs")

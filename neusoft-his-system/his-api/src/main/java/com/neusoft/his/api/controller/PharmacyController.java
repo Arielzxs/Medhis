@@ -39,9 +39,12 @@ public class PharmacyController {
     }
 
     @GetMapping("/inventory")
-    public ApiResponse<PageResponse<DrugCatalog>> inventory(@RequestParam(defaultValue = "1") long page,
+    public ApiResponse<PageResponse<DrugCatalog>> inventory(@RequestParam(required = false) String codeKeyword,
+                                                            @RequestParam(required = false) String nameKeyword,
+                                                            @RequestParam(required = false) Boolean warningOnly,
+                                                            @RequestParam(defaultValue = "1") long page,
                                                             @RequestParam(defaultValue = "10") long size) {
-        return ApiResponse.ok(service.inventory(page, size));
+        return ApiResponse.ok(service.inventory(codeKeyword, nameKeyword, warningOnly, page, size));
     }
 
     @GetMapping("/inventory/warnings")

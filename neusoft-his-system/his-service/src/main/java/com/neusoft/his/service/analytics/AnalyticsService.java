@@ -10,6 +10,7 @@ import com.neusoft.his.dal.mapper.MedicalRecordMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -57,10 +58,26 @@ public class AnalyticsService {
     }
 
     public Map<String, Object> dashboard() {
+        LocalDate today = LocalDate.now();
+        QueryWrapper<OutpatientRegistration> registrationQuery = new QueryWrapper<>();
+        registrationQuery.likeRight("created_at", today.toString());
+        List<OutpatientRegistration> todayRegistrations = registrationMapper.selectList(registrationQuery);
+
+        QueryWrapper<FinancialTransaction> financeQuery = new QueryWrapper<>();
+        financeQuery.likeRight("created_at", today.toString()).eq("direction", "IN");
+        double todayIncome = transactionMapper.selectList(financeQuery).stream()
+                .mapToDouble(item -> item.getAmount() == null ? 0D : item.getAmount().doubleValue())
+                .sum();
+
         return Map.of(
                 "outpatientTrend", outpatientTrend(),
                 "doctorWorkload", doctorWorkload(),
                 "financeSummary", financeSummary(),
+                "todayRegistrations", todayRegistrations.size(),
+                "waitingPatients", todayRegistrations.stream()
+                        .filter(item -> item.getStatus() != null && List.of("待缴费", "待诊", "待诊中").contains(item.getStatus()))
+                        .count(),
+                "todayIncome", todayIncome,
                 "auditLogCount", auditService.list().size() // 演示保留
         );
     }

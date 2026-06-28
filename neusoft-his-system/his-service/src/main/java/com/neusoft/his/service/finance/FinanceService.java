@@ -11,6 +11,7 @@ import com.neusoft.his.dal.entity.Prescription;
 import com.neusoft.his.dal.mapper.BillingRecordMapper;
 import com.neusoft.his.dal.mapper.FinancialTransactionMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -141,19 +142,28 @@ public class FinanceService {
         return "日结完成: 收入=" + income + " 支出=" + out + " 结余=" + income.subtract(out);
     }
 
-    public PageResponse<FinancialTransaction> report(long page, long size) {
+    public PageResponse<FinancialTransaction> report(String date, long page, long size) {
         Page<FinancialTransaction> pageParam = new Page<>(page, size);
         QueryWrapper<FinancialTransaction> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(date)) {
+            query.likeRight("created_at", date);
+        }
         query.orderByDesc("created_at");
         transactionMapper.selectPage(pageParam, query);
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
     }
 
-    public PageResponse<BillingRecord> bills(String status, long page, long size) {
+    public PageResponse<BillingRecord> bills(String status, String keyword, String patientKeyword, long page, long size) {
         Page<BillingRecord> pageParam = new Page<>(page, size);
         QueryWrapper<BillingRecord> query = new QueryWrapper<>();
-        if (status != null && !status.isBlank()) {
+        if (StringUtils.isNotBlank(status)) {
             query.eq("status", status);
+        }
+        if (StringUtils.isNotBlank(keyword)) {
+            query.and(wrapper -> wrapper.like("id", keyword));
+        }
+        if (StringUtils.isNotBlank(patientKeyword)) {
+            query.and(wrapper -> wrapper.like("patient_id", patientKeyword));
         }
         query.orderByDesc("created_at");
         billingMapper.selectPage(pageParam, query);

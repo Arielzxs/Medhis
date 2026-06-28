@@ -125,6 +125,18 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="chargePage.page"
+              v-model:page-size="chargePage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="chargePage.total"
+              @current-change="fetchPendingBills"
+              @size-change="handleChargePageSizeChange"
+            />
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="门诊退费管理" name="refund">
@@ -222,6 +234,18 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="refundPage.page"
+              v-model:page-size="refundPage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="refundPage.total"
+              @current-change="fetchPaidBills"
+              @size-change="handleRefundPageSizeChange"
+            />
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="日结对账" name="daily">
@@ -361,6 +385,7 @@ const activeTab = ref("charge");
 const loadingCharge = ref(false);
 const chargeQuery = reactive({ patientNo: "", patientName: "" });
 const pendingBills = ref([]);
+const chargePage = reactive({ page: 1, size: 10, total: 0 });
 const chargeDialogVisible = ref(false);
 const currentBill = ref(null);
 const chargeForm = reactive({ settlementType: "自费", payChannel: "微信" });
@@ -391,18 +416,16 @@ const fetchPendingBills = async () => {
   loadingCharge.value = true;
   try {
     const res = await request.get("/api/finance/bills", {
-      params: { status: "PRICED", page: 1, size: 100 },
+      params: {
+        status: "PRICED",
+        keyword: chargeQuery.patientNo || undefined,
+        patientKeyword: chargeQuery.patientName || undefined,
+        page: chargePage.page,
+        size: chargePage.size,
+      },
     });
-    pendingBills.value = (res.records || []).map(mapBill).filter((bill) => {
-      const patientMatched = chargeQuery.patientNo
-        ? bill.patientName.includes(chargeQuery.patientNo) ||
-          bill.billNo.includes(chargeQuery.patientNo)
-        : true;
-      const nameMatched = chargeQuery.patientName
-        ? bill.patientName.includes(chargeQuery.patientName)
-        : true;
-      return patientMatched && nameMatched;
-    });
+    pendingBills.value = (res.records || []).map(mapBill);
+    chargePage.total = res.total || 0;
   } finally {
     loadingCharge.value = false;
   }
@@ -411,6 +434,12 @@ const fetchPendingBills = async () => {
 const resetChargeQuery = () => {
   chargeQuery.patientNo = "";
   chargeQuery.patientName = "";
+  chargePage.page = 1;
+  fetchPendingBills();
+};
+
+const handleChargePageSizeChange = () => {
+  chargePage.page = 1;
   fetchPendingBills();
 };
 
@@ -439,6 +468,7 @@ const submitCharge = async () => {
 const loadingRefund = ref(false);
 const refundQuery = reactive({ billNo: "", patientName: "" });
 const paidBills = ref([]);
+const refundPage = reactive({ page: 1, size: 10, total: 0 });
 const refundDialogVisible = ref(false);
 const currentRefundBill = ref(null);
 const refundForm = reactive({ reason: "" });
@@ -447,20 +477,24 @@ const fetchPaidBills = async () => {
   loadingRefund.value = true;
   try {
     const res = await request.get("/api/finance/bills", {
-      params: { status: "PAID", page: 1, size: 100 },
+      params: {
+        status: "PAID",
+        keyword: refundQuery.billNo || undefined,
+        patientKeyword: refundQuery.patientName || undefined,
+        page: refundPage.page,
+        size: refundPage.size,
+      },
     });
-    paidBills.value = (res.records || []).map(mapBill).filter((bill) => {
-      const billMatched = refundQuery.billNo
-        ? bill.billNo.includes(refundQuery.billNo)
-        : true;
-      const nameMatched = refundQuery.patientName
-        ? bill.patientName.includes(refundQuery.patientName)
-        : true;
-      return billMatched && nameMatched;
-    });
+    paidBills.value = (res.records || []).map(mapBill);
+    refundPage.total = res.total || 0;
   } finally {
     loadingRefund.value = false;
   }
+};
+
+const handleRefundPageSizeChange = () => {
+  refundPage.page = 1;
+  fetchPaidBills();
 };
 
 const openRefundDialog = (row) => {
@@ -488,15 +522,13 @@ const dailyDate = ref(new Date());
 const dailyStats = reactive({ totalIncome: 0, totalRefund: 0, netIncome: 0 });
 
 const fetchDailyStats = async () => {
-  const res = await request.get("/api/finance/reports", {
-    params: { page: 1, size: 500 },
-  });
   const date = dailyDate.value instanceof Date
     ? dailyDate.value.toISOString().slice(0, 10)
     : "";
-  const records = (res.records || []).filter((item) =>
-    date ? item.createdAt?.startsWith(date) : true,
-  );
+  const res = await request.get("/api/finance/reports", {
+    params: { date, page: 1, size: 200 },
+  });
+  const records = res.records || [];
   dailyStats.totalIncome = records
     .filter((item) => item.direction === "IN")
     .reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -563,6 +595,12 @@ onMounted(() => {
   padding: 18px 18px 0 18px;
   border-radius: 4px;
   margin-bottom: 20px;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .amount-text {

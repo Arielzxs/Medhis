@@ -35,9 +35,11 @@ public class FinanceController {
 
     @GetMapping("/bills")
     public ApiResponse<PageResponse<BillingRecord>> bills(@RequestParam(required = false) String status,
+                                                          @RequestParam(required = false) String keyword,
+                                                          @RequestParam(required = false) String patientKeyword,
                                                           @RequestParam(defaultValue = "1") long page,
                                                           @RequestParam(defaultValue = "10") long size) {
-        return ApiResponse.ok(service.bills(status, page, size));
+        return ApiResponse.ok(service.bills(status, keyword, patientKeyword, page, size));
     }
 
     @PostMapping("/prescriptions/{id}/mark-paid")
@@ -67,8 +69,9 @@ public class FinanceController {
     }
 
     @GetMapping("/reports")
-    public ApiResponse<PageResponse<FinancialTransaction>> reports(@RequestParam(defaultValue = "1") long page,
+    public ApiResponse<PageResponse<FinancialTransaction>> reports(@RequestParam(required = false) String date,
+                                                                   @RequestParam(defaultValue = "1") long page,
                                                                    @RequestParam(defaultValue = "10") long size) {
-        return ApiResponse.ok(service.report(page, size));
+        return ApiResponse.ok(service.report(date, page, size));
     }
 }

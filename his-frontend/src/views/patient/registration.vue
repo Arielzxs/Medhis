@@ -188,6 +188,19 @@
             </el-table-column>
           </el-table>
 
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="schedulePage.page"
+              v-model:page-size="schedulePage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="schedulePage.total"
+              @current-change="fetchSchedules"
+              @size-change="handleSchedulePageSizeChange"
+            />
+          </div>
+
           <div class="bottom-action">
             <div class="summary">
               已选看诊医生：<span class="highlight">{{
@@ -277,6 +290,11 @@ const scheduleQuery = reactive({ department: "", doctorName: "", date: "" });
 const scheduleList = ref([]);
 const selectedScheduleId = ref(null);
 const selectedSchedule = ref(null);
+const schedulePage = reactive({
+  page: 1,
+  size: 10,
+  total: 0,
+});
 
 const doctorFee = (title = "") => {
   if (title.includes("主任")) return 50;
@@ -290,8 +308,8 @@ const fetchSchedules = async () => {
       department: scheduleQuery.department,
       doctorName: scheduleQuery.doctorName,
       date: scheduleQuery.date,
-      page: 1,
-      size: 100,
+      page: schedulePage.page,
+      size: schedulePage.size,
     },
   });
   scheduleList.value = (res.records || [])
@@ -306,8 +324,14 @@ const fetchSchedules = async () => {
       fee: doctorFee(schedule.title),
       remain: schedule.status === 0 ? 0 : (schedule.remain ?? schedule.limit ?? 0),
     }));
+  schedulePage.total = res.total || 0;
   selectedScheduleId.value = null;
   selectedSchedule.value = null;
+};
+
+const handleSchedulePageSizeChange = () => {
+  schedulePage.page = 1;
+  fetchSchedules();
 };
 
 const handleSelectSchedule = (row) => {
@@ -358,6 +382,12 @@ onMounted(() => {
 
 .search-bar {
   margin-bottom: 25px;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 .patient-form {
   padding: 0 10px;

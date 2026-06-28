@@ -1,6 +1,7 @@
 package com.neusoft.his.service.doctor;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
@@ -14,17 +15,13 @@ import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
-import com.neusoft.his.service.dto.DoctorScheduleView;
+import com.neusoft.his.dal.view.DoctorScheduleView;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 public class DoctorWorkstationService {
@@ -70,33 +67,12 @@ public class DoctorWorkstationService {
 
     public PageResponse<DoctorScheduleView> scheduleQuery(String department, String doctorName, String date,
                                                           long page, long size) {
-        QueryWrapper<DoctorSchedule> query = new QueryWrapper<>();
-        if (StringUtils.isNotBlank(date)) {
-            query.eq("schedule_date", date);
-        }
-        query.orderByDesc("schedule_date").orderByAsc("shift").orderByDesc("created_at");
-        List<DoctorSchedule> schedules = scheduleMapper.selectList(query);
-
-        Map<Long, DoctorProfile> doctors = schedules.stream()
-                .map(DoctorSchedule::getDoctorId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.collectingAndThen(Collectors.toList(), ids -> {
-                    if (ids.isEmpty()) return Map.of();
-                    return doctorMapper.selectBatchIds(ids).stream()
-                            .collect(Collectors.toMap(DoctorProfile::getId, Function.identity()));
-                }));
-
-        List<DoctorScheduleView> filtered = schedules.stream()
-                .map(schedule -> toScheduleView(schedule, doctors.get(schedule.getDoctorId())))
-                .filter(item -> StringUtils.isBlank(department) || department.equals(item.department()))
-                .filter(item -> StringUtils.isBlank(doctorName) || StringUtils.contains(item.doctorName(), doctorName))
-                .toList();
         long safePage = Math.max(page, 1);
         long safeSize = Math.max(size, 1);
-        int from = (int) Math.min((safePage - 1) * safeSize, filtered.size());
-        int to = (int) Math.min(from + safeSize, filtered.size());
-        return new PageResponse<>(safePage, safeSize, filtered.size(), filtered.subList(from, to));
+        Page<Object> pageParam = new Page<>(safePage, safeSize);
+        List<DoctorScheduleView> records = scheduleMapper.selectSchedulePage(pageParam, department, doctorName, date);
+        long total = scheduleMapper.countSchedulePage(department, doctorName, date);
+        return new PageResponse<>(safePage, safeSize, total, records);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -156,31 +132,6 @@ public class DoctorWorkstationService {
         if (schedule.getRegistrationLimit() != null && schedule.getRegistrationLimit() < 0) {
             throw new BizException("挂号限额不能小于0");
         }
-    }
-
-    private DoctorScheduleView toScheduleView(DoctorSchedule schedule, DoctorProfile doctor) {
-        String title = doctor == null ? "" : doctor.getTitle();
-        int limit = schedule.getRegistrationLimit() == null ? 0 : schedule.getRegistrationLimit();
-        long used = registrationMapper.selectCount(new QueryWrapper<OutpatientRegistration>()
-                .eq("doctor_id", schedule.getDoctorId())
-                .eq("schedule_date", schedule.getScheduleDate()));
-        int remain = Math.max(limit - (int) used, 0);
-        String attendanceStatus = schedule.getStatus() != null && schedule.getStatus() == 0 ? "停诊" : schedule.getShift();
-        return new DoctorScheduleView(
-                schedule.getId(),
-                schedule.getDoctorId(),
-                schedule.getScheduleDate(),
-                schedule.getShift(),
-                doctor == null ? "" : doctor.getDepartment(),
-                doctor == null ? "" : doctor.getName(),
-                doctor == null ? "" : doctor.getName(),
-                title,
-                attendanceStatus,
-                schedule.getLevel(),
-                limit,
-                remain,
-                schedule.getStatus()
-        );
     }
 
     public String callPatient(Long patientId) {
