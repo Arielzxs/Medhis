@@ -30,7 +30,7 @@ public class DoctorController {
     @GetMapping
     @RequireRoles({RoleCode.DOCTOR, RoleCode.REGISTRAR, RoleCode.ADMIN})
     @Operation(summary = "查询医生列表", description = "按科室筛选医生档案，用于排班和挂号选择。")
-    public ApiResponse<List<DoctorProfile>> doctors(@Parameter(description = "科室名称") @RequestParam(required = false) String department) {
+    public ApiResponse<List<DoctorProfile>> doctors(@Parameter(description = "科室名称") @RequestParam(defaultValue = "心血管内科") String department) {
         return ApiResponse.ok(service.listDoctors(department));
     }
 
@@ -44,12 +44,13 @@ public class DoctorController {
     @GetMapping("/schedules")
     @RequireRoles({RoleCode.DOCTOR, RoleCode.REGISTRAR, RoleCode.ADMIN})
     @Operation(summary = "分页查询医生排班", description = "门诊挂号页使用该接口查询号源、剩余号和排班信息。")
-    public ApiResponse<PageResponse<DoctorScheduleView>> schedules(@Parameter(description = "科室名称") @RequestParam(required = false) String department,
+    public ApiResponse<PageResponse<DoctorScheduleView>> schedules(@Parameter(description = "科室名称") @RequestParam(defaultValue = "心血管内科") String department,
                                                                    @Parameter(description = "医生姓名关键字") @RequestParam(required = false) String doctorName,
                                                                    @Parameter(description = "排班日期，格式 yyyy-MM-dd") @RequestParam(required = false) String date,
+                                                                   @Parameter(description = "是否只查询可挂号号源") @RequestParam(defaultValue = "false") boolean availableOnly,
                                                                    @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
                                                                    @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
-        return ApiResponse.ok(service.scheduleQuery(department, doctorName, date, page, size));
+        return ApiResponse.ok(service.scheduleQuery(department, doctorName, date, availableOnly, page, size));
     }
 
     @PostMapping("/schedules")
@@ -104,8 +105,10 @@ public class DoctorController {
         return ApiResponse.ok("处方开具成功", service.prescribe(prescription));
     }
     @GetMapping("/prescriptions")
-    @Operation(summary = "查询全部处方", description = "返回系统内所有处方，供药房或联调页面使用。")
-    public ApiResponse<List<Prescription>> getAllPrescriptions() {
-        return ApiResponse.ok(service.listPrescriptions());
+    @Operation(summary = "分页查询处方", description = "分页返回处方数据，避免一次返回全部处方导致文档页或前端卡顿。")
+    public ApiResponse<PageResponse<Prescription>> getAllPrescriptions(
+            @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
+            @Parameter(description = "每页条数，最大 50") @RequestParam(defaultValue = "10") long size) {
+        return ApiResponse.ok(service.listPrescriptions(page, size));
     }
 }

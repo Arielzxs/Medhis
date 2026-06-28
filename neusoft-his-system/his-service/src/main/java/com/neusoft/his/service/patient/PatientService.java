@@ -3,6 +3,7 @@ package com.neusoft.his.service.patient;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.OutpatientRegistration;
@@ -27,6 +28,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.math.BigDecimal;
 
 /**
  * 患者管理业务服务。
@@ -56,17 +58,41 @@ public class PatientService {
             throw new BizException("患者姓名不能为空");
         }
 
-        // 2. 自动生成唯一的患者编号 (如果前端未传入)
+        // 2. 按身份证号查重：已存在则更新，不存在则新建
+        if (StringUtils.isNotBlank(patient.getIdCard())) {
+            Patient existing = patientMapper.selectByIdCard(patient.getIdCard());
+            if (existing != null) {
+                patient.setId(existing.getId());
+                patient.setUpdatedAt(LocalDateTime.now());
+                if (StringUtils.isBlank(patient.getPatientNo())) {
+                    patient.setPatientNo(existing.getPatientNo());
+                }
+                if (StringUtils.isBlank(patient.getCurrentStatus())) {
+                    patient.setCurrentStatus(existing.getCurrentStatus());
+                }
+                if (patient.getBalance() == null) {
+                    patient.setBalance(existing.getBalance());
+                }
+                patientMapper.updateById(patient);
+                auditService.log("PATIENT_UPDATE", "患者更新(按身份证号): " + patient.getName() + ", 身份证: " + patient.getIdCard());
+                return patient;
+            }
+        }
+
+        // 3. 自动生成唯一的患者编号 (如果前端未传入)
         if (StringUtils.isBlank(patient.getPatientNo())) {
             patient.setPatientNo(generatePatientNo());
         }
 
-        // 3. 处理默认值，保证与数据库设计一致
+        // 4. 处理默认值，保证与数据库设计一致
         if (StringUtils.isBlank(patient.getGender())) {
             patient.setGender("未知");
         }
         if (StringUtils.isBlank(patient.getCurrentStatus())) {
             patient.setCurrentStatus("正常");
+        }
+        if (patient.getBalance() == null) {
+            patient.setBalance(BigDecimal.ZERO);
         }
 
         patient.setCreatedAt(LocalDateTime.now());
@@ -79,18 +105,58 @@ public class PatientService {
 
     @Transactional(rollbackFor = Exception.class)
     public Patient update(Long id, Patient patient) {
-        Patient old = patientMapper.selectById(id);
+        Patient old = patientMapper.selectByIdCard(patient.getIdCard());
         if (old == null) throw new BizException("患者不存在");
 
         patient.setId(id);
+        if (patient.getBalance() == null) {
+            patient.setBalance(old.getBalance());
+        }
         patient.setUpdatedAt(LocalDateTime.now());
         patientMapper.updateById(patient);
         auditService.log("PATIENT_UPDATE", "更新患者: " + id);
         return patient;
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public Patient recharge(Long id, BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException("充值金额必须大于0");
+        }
+        Patient patient = patientMapper.selectById(id);
+        if (patient == null) {
+            throw new BizException("患者不存在");
+        }
+        BigDecimal currentBalance = patient.getBalance() == null ? BigDecimal.ZERO : patient.getBalance();
+        patient.setBalance(currentBalance.add(amount));
+        patient.setUpdatedAt(LocalDateTime.now());
+        patientMapper.updateById(patient);
+        auditService.log("PATIENT_RECHARGE", "患者充值: " + id + ", 金额: " + amount);
+        return patient;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Patient refundBalance(Long id, BigDecimal amount, String reason) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException("退费金额必须大于0");
+        }
+        Patient patient = patientMapper.selectById(id);
+        if (patient == null) {
+            throw new BizException("患者不存在");
+        }
+        BigDecimal currentBalance = patient.getBalance() == null ? BigDecimal.ZERO : patient.getBalance();
+        if (currentBalance.compareTo(amount) < 0) {
+            throw new BizException("就诊卡余额不足");
+        }
+        patient.setBalance(currentBalance.subtract(amount));
+        patient.setUpdatedAt(LocalDateTime.now());
+        patientMapper.updateById(patient);
+        auditService.log("PATIENT_BALANCE_REFUND", "患者余额退费: " + id + ", 金额: " + amount + ", 原因: " + StringUtils.defaultIfBlank(reason, "未填写"));
+        return patient;
+    }
+
     public PageResponse<Patient> query(String keyword, long page, long size) {
-        Page<Patient> pageParam = new Page<>(page, size);
+        Page<Patient> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<Patient> query = new QueryWrapper<>();
         if (StringUtils.isNotBlank(keyword)) {
             query.like("name", keyword).or().like("patient_no", keyword).or().like("id_card", keyword);
@@ -102,7 +168,7 @@ public class PatientService {
     @Transactional(rollbackFor = Exception.class)
     public OutpatientRegistration register(PatientRegistrationRequest req) {
         Patient patient = patientMapper.selectById(req.patientId());
-        if (patient == null) throw new BizException("患者不存在");
+        if (patient == null) throw new BizException("患者不存在2");
 
         OutpatientRegistration reg = new OutpatientRegistration();
         reg.setPatientId(req.patientId());
@@ -167,7 +233,7 @@ public class PatientService {
     }
 
     public PageResponse<Map<String, Object>> registrations(Long id, String status, long page, long size) {
-        Page<OutpatientRegistration> pageParam = new Page<>(page, size);
+        Page<OutpatientRegistration> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<OutpatientRegistration> query = new QueryWrapper<>();
         if (id != null) {
             query.eq("id", id);

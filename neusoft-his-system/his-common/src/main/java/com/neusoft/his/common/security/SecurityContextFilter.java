@@ -22,9 +22,10 @@ public class SecurityContextFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String auth = request.getHeader("Authorization");
-        if (auth != null && auth.startsWith("Bearer ")) {
+        String token = resolveToken(auth);
+        if (token != null) {
             try {
-                SecurityUserHolder.set(tokenProvider.parse(auth.substring(7)));
+                SecurityUserHolder.set(tokenProvider.parse(token));
             } catch (Exception ex) {
                 LOGGER.warn("JWT token parse failed: {}", ex.getMessage());
                 SecurityUserHolder.clear();
@@ -35,5 +36,21 @@ public class SecurityContextFilter extends OncePerRequestFilter {
         } finally {
             SecurityUserHolder.clear();
         }
+    }
+
+    /**
+     * 兼容 Knife4j/Swagger 调试时常见的两种填写方式：
+     * 1. Authorization: Bearer xxx
+     * 2. Authorization: xxx
+     */
+    private String resolveToken(String auth) {
+        if (auth == null || auth.isBlank()) {
+            return null;
+        }
+        String token = auth.trim();
+        while (token.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            token = token.substring(7).trim();
+        }
+        return token.isBlank() ? null : token;
     }
 }

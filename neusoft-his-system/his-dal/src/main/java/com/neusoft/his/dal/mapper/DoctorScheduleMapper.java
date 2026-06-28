@@ -14,11 +14,13 @@ public interface DoctorScheduleMapper extends BaseMapper<DoctorSchedule> {
     List<DoctorScheduleView> selectSchedulePage(Page<?> page,
                                                 @Param("department") String department,
                                                 @Param("doctorName") String doctorName,
-                                                @Param("date") String date);
+                                                @Param("date") String date,
+                                                @Param("availableOnly") boolean availableOnly);
 
     long countSchedulePage(@Param("department") String department,
                            @Param("doctorName") String doctorName,
-                           @Param("date") String date);
+                           @Param("date") String date,
+                           @Param("availableOnly") boolean availableOnly);
 
     List<ScheduleRegistrationCount> countRegistrationsForSchedules(@Param("schedules") List<DoctorScheduleView> schedules);
 

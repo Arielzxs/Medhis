@@ -15,6 +15,10 @@
             <if test="doctorName != null and doctorName != ''">
                 AND dp.name LIKE CONCAT('%', #{doctorName}, '%')
             </if>
+            <if test="availableOnly">
+                AND ds.status = 1
+                AND ds.schedule_date &gt;= DATE_FORMAT(CURDATE(), '%Y-%m-%d')
+            </if>
         </where>
     </sql>
 
@@ -34,15 +38,22 @@
             COALESCE(ds.registration_limit, 0) AS remain,
             ds.status
         FROM doctor_schedule ds
-        LEFT JOIN doctor_profile dp ON dp.id = ds.doctor_id
+        INNER JOIN doctor_profile dp ON dp.id = ds.doctor_id
         <include refid="scheduleWhere"/>
-        ORDER BY ds.schedule_date DESC, ds.shift ASC, ds.created_at DESC
+        <choose>
+            <when test="availableOnly">
+                ORDER BY ds.schedule_date ASC, ds.shift ASC, ds.created_at DESC
+            </when>
+            <otherwise>
+                ORDER BY ds.schedule_date DESC, ds.shift ASC, ds.created_at DESC
+            </otherwise>
+        </choose>
     </select>
 
     <select id="countSchedulePage" resultType="long">
         SELECT COUNT(1)
         FROM doctor_schedule ds
-        LEFT JOIN doctor_profile dp ON dp.id = ds.doctor_id
+        INNER JOIN doctor_profile dp ON dp.id = ds.doctor_id
         <include refid="scheduleWhere"/>
     </select>
 
@@ -56,6 +67,7 @@
         <foreach collection="schedules" item="schedule" open="(" separator=" OR " close=")">
             (doctor_id = #{schedule.doctorId} AND schedule_date = #{schedule.scheduleDate})
         </foreach>
+        AND (status IS NULL OR status NOT IN ('已退号', '已取消', 'CANCELLED'))
         GROUP BY doctor_id, schedule_date
     </select>
 </mapper>

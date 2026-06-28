@@ -489,8 +489,10 @@ const parseItems = (text) => {
 const fetchPrescriptions = async () => {
   loadingDispense.value = true;
   try {
-    const res = await request.get("/api/doctors/prescriptions");
-    prescriptionList.value = (res || [])
+    const res = await request.get("/api/doctors/prescriptions", {
+      params: { page: 1, size: 20 },
+    });
+    prescriptionList.value = (res.records || [])
       .map((item) => ({
         id: item.id,
         prescriptionNo: `RX${item.id}`,

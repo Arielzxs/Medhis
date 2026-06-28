@@ -174,6 +174,7 @@ import { ElMessage } from "element-plus";
 import request from "../../utils/request";
 
 const departments = ["心血管内科", "儿科", "消化内科", "普外科"];
+const DEFAULT_OUTPATIENT_DEPARTMENT = "心血管内科";
 const loading = ref(false);
 const saving = ref(false);
 const dialogVisible = ref(false);
@@ -187,7 +188,7 @@ const pageState = reactive({
 });
 
 const queryParams = reactive({
-  department: "",
+  department: DEFAULT_OUTPATIENT_DEPARTMENT,
   doctorName: "",
   date: "",
 });
@@ -271,7 +272,7 @@ const handlePageSizeChange = () => {
 };
 
 const resetQuery = () => {
-  queryParams.department = "";
+  queryParams.department = DEFAULT_OUTPATIENT_DEPARTMENT;
   queryParams.doctorName = "";
   queryParams.date = "";
   handleSearch();

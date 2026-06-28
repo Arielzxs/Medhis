@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS patient (
     birthday DATE,
     phone VARCHAR(32),
     id_card VARCHAR(32),
+    balance DECIMAL(12,2) DEFAULT 0.00,
     current_status VARCHAR(32),
     created_at DATETIME,
     updated_at DATETIME

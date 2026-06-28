@@ -3,6 +3,7 @@ package com.neusoft.his.service.doctor;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.DoctorProfile;
@@ -34,6 +35,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class DoctorWorkstationService {
+    private static final String DEFAULT_OUTPATIENT_DEPARTMENT = "\u5fc3\u8840\u7ba1\u5185\u79d1";
+
     private final DoctorProfileMapper doctorMapper;
     private final DoctorScheduleMapper scheduleMapper;
     private final MedicalRecordMapper recordMapper;
@@ -67,23 +70,27 @@ public class DoctorWorkstationService {
 
     public List<DoctorProfile> listDoctors(String department) {
         QueryWrapper<DoctorProfile> query = new QueryWrapper<>();
-        if (StringUtils.isNotBlank(department)) {
-            query.eq("department", department);
-        }
+        query.eq("department", normalizeDepartment(department));
         query.orderByAsc("department").orderByAsc("name");
         return doctorMapper.selectList(query);
     }
 
     public PageResponse<DoctorScheduleView> scheduleQuery(String department, String doctorName, String date,
-                                                          long page, long size) {
+                                                          boolean availableOnly, long page, long size) {
+        String queryDepartment = normalizeDepartment(department);
         long safePage = Math.max(page, 1);
-        long safeSize = Math.max(size, 1);
+        safePage = PageSupport.page(safePage);
+        long safeSize = PageSupport.size(size);
         Page<Object> pageParam = new Page<>(safePage, safeSize);
-        List<DoctorScheduleView> records = scheduleMapper.selectSchedulePage(pageParam, department, doctorName, date);
-        long total = scheduleMapper.countSchedulePage(department, doctorName, date);
+        List<DoctorScheduleView> records = scheduleMapper.selectSchedulePage(pageParam, queryDepartment, doctorName, date, availableOnly);
+        long total = scheduleMapper.countSchedulePage(queryDepartment, doctorName, date, availableOnly);
         // 剩余号源只基于当前页排班批量统计，避免对全部挂号记录做全表聚合。
         List<DoctorScheduleView> recordsWithRemain = fillScheduleRemain(records);
         return new PageResponse<>(safePage, safeSize, total, recordsWithRemain);
+    }
+
+    private String normalizeDepartment(String department) {
+        return StringUtils.defaultIfBlank(department, DEFAULT_OUTPATIENT_DEPARTMENT);
     }
 
     private List<DoctorScheduleView> fillScheduleRemain(List<DoctorScheduleView> records) {
@@ -237,7 +244,11 @@ public class DoctorWorkstationService {
         return prescription;
     }
 
-    public List<Prescription> listPrescriptions() {
-        return prescriptionMapper.selectList(null);
+    public PageResponse<Prescription> listPrescriptions(long page, long size) {
+        Page<Prescription> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
+        QueryWrapper<Prescription> query = new QueryWrapper<>();
+        query.orderByDesc("created_at");
+        prescriptionMapper.selectPage(pageParam, query);
+        return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
     }
 }

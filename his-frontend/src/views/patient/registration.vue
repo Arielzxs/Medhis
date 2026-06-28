@@ -15,6 +15,7 @@
               placeholder="请输入患者身份证号检索"
               class="input-with-select"
               clearable
+              :disabled="patientLocked"
             >
               <template #append>
                 <el-button icon="Search" @click="handleSearchPatient"
@@ -31,16 +32,31 @@
             class="patient-form"
           >
             <el-form-item label="姓名">
-              <el-input v-model="patientForm.name" placeholder="请输入姓名" />
+              <el-input
+                v-model="patientForm.name"
+                placeholder="请输入姓名"
+                :disabled="patientLocked"
+              />
             </el-form-item>
             <el-form-item label="身份证号">
               <el-input
                 v-model="patientForm.idCard"
                 placeholder="请输入身份证号"
-              />
+                :disabled="patientLocked"
+              >
+                <template #append>
+                  <el-button
+                    :loading="idCardParsing"
+                    @click="parseIdCard"
+                    :disabled="patientLocked || !patientForm.idCard || patientForm.idCard.length !== 18"
+                  >
+                    识别生日
+                  </el-button>
+                </template>
+              </el-input>
             </el-form-item>
             <el-form-item label="性别">
-              <el-radio-group v-model="patientForm.gender">
+              <el-radio-group v-model="patientForm.gender" :disabled="patientLocked">
                 <el-radio label="男">男</el-radio>
                 <el-radio label="女">女</el-radio>
               </el-radio-group>
@@ -51,21 +67,35 @@
                 type="date"
                 placeholder="选择日期"
                 style="width: 100%"
+                :disabled="patientLocked"
               />
             </el-form-item>
             <el-form-item label="联系电话">
               <el-input
                 v-model="patientForm.phone"
                 placeholder="请输入手机号"
+                :disabled="patientLocked"
               />
             </el-form-item>
             <el-divider border-style="dashed" />
             <el-form-item label="就诊卡余额">
               <span class="balance-text"
-                >¥ {{ patientForm.balance.toFixed(2) }}</span
+                >¥ {{ Number(patientForm.balance || 0).toFixed(2) }}</span
               >
-              <el-button type="primary" link style="margin-left: 15px"
+              <el-button
+                type="primary"
+                link
+                style="margin-left: 15px"
+                :disabled="!patientLocked"
+                @click="openRechargeDialog"
                 >充值</el-button
+              >
+              <el-button
+                type="danger"
+                link
+                :disabled="!patientLocked || Number(patientForm.balance || 0) <= 0"
+                @click="openBalanceRefundDialog"
+                >退费</el-button
               >
             </el-form-item>
 
@@ -73,9 +103,25 @@
               <el-button
                 type="primary"
                 plain
-                style="width: 100%"
+                style="flex: 1"
+                :disabled="patientLocked"
                 @click="savePatient"
                 >保存 / 更新档案</el-button
+              >
+              <el-button
+                type="success"
+                plain
+                style="flex: 1"
+                :disabled="patientLocked || !patientForm.name || !patientForm.idCard"
+                @click="confirmPatient"
+                >确认当前患者</el-button
+              >
+              <el-button
+                v-if="patientLocked"
+                plain
+                style="flex: 1"
+                @click="unlockPatient"
+                >更换患者</el-button
               >
             </div>
           </el-form>
@@ -219,7 +265,7 @@
             <el-button
               type="success"
               size="large"
-              :disabled="scheduleLoading || !selectedSchedule || !patientForm.id"
+              :disabled="scheduleLoading || !selectedSchedule || !patientLocked"
               @click="submitRegistration"
             >
               确认挂号并缴费
@@ -228,6 +274,77 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog
+      v-model="rechargeVisible"
+      title="就诊卡充值"
+      width="420px"
+      destroy-on-close
+    >
+      <el-form :model="rechargeForm" label-width="90px">
+        <el-form-item label="当前患者">
+          <span>{{ patientForm.name }} / {{ patientForm.idCard }}</span>
+        </el-form-item>
+        <el-form-item label="当前余额">
+          <span class="balance-text">¥ {{ Number(patientForm.balance || 0).toFixed(2) }}</span>
+        </el-form-item>
+        <el-form-item label="充值金额">
+          <el-input-number
+            v-model="rechargeForm.amount"
+            :min="1"
+            :precision="2"
+            :step="50"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rechargeVisible = false">取消</el-button>
+        <el-button type="primary" :loading="rechargeLoading" @click="submitRecharge"
+          >确认充值</el-button
+        >
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="balanceRefundVisible"
+      title="就诊卡余额退费"
+      width="420px"
+      destroy-on-close
+    >
+      <el-form :model="balanceRefundForm" label-width="90px">
+        <el-form-item label="当前患者">
+          <span>{{ patientForm.name }} / {{ patientForm.idCard }}</span>
+        </el-form-item>
+        <el-form-item label="当前余额">
+          <span class="balance-text">¥ {{ Number(patientForm.balance || 0).toFixed(2) }}</span>
+        </el-form-item>
+        <el-form-item label="退费金额">
+          <el-input-number
+            v-model="balanceRefundForm.amount"
+            :min="0.01"
+            :max="Number(patientForm.balance || 0)"
+            :precision="2"
+            :step="50"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="退费原因">
+          <el-input
+            v-model="balanceRefundForm.reason"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入退费原因"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="balanceRefundVisible = false">取消</el-button>
+        <el-button type="danger" :loading="balanceRefundLoading" @click="submitBalanceRefund"
+          >确认退费</el-button
+        >
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -248,7 +365,53 @@ const patientForm = reactive({
   balance: 0.0,
 });
 
+const idCardParsing = ref(false);
+const patientLocked = ref(false);
+const rechargeVisible = ref(false);
+const rechargeLoading = ref(false);
+const rechargeForm = reactive({ amount: 100 });
+const balanceRefundVisible = ref(false);
+const balanceRefundLoading = ref(false);
+const balanceRefundForm = reactive({ amount: 100, reason: "" });
+
+const applyPatient = (patient) => {
+  Object.assign(patientForm, {
+    id: patient.id,
+    name: patient.name || "",
+    idCard: patient.idCard || "",
+    gender: patient.gender || "未知",
+    birthday: patient.birthday || "",
+    phone: patient.phone || "",
+    balance: Number(patient.balance || 0),
+  });
+};
+
+const parseIdCard = async () => {
+  const idCard = patientForm.idCard;
+  if (!idCard || idCard.length !== 18) {
+    return ElMessage.warning("请输入 18 位身份证号");
+  }
+  idCardParsing.value = true;
+  try {
+    const res = await request.get("/api/patients/idcard/parse", {
+      params: { card: idCard },
+    });
+    if (res.birthday) {
+      patientForm.birthday = new Date(res.birthday);
+    }
+    if (res.gender) {
+      patientForm.gender = res.gender;
+    }
+    ElMessage.success("已识别生日: " + res.birthday + "，性别: " + res.gender);
+  } catch {
+    // 拦截器已弹出后端错误信息
+  } finally {
+    idCardParsing.value = false;
+  }
+};
+
 const handleSearchPatient = async () => {
+  if (patientLocked.value) return ElMessage.warning("请先更换患者后再查询");
   if (!searchIdCard.value) return ElMessage.warning("请输入身份证号");
   const res = await request.get("/api/patients", {
     params: { keyword: searchIdCard.value, page: 1, size: 1 },
@@ -257,18 +420,12 @@ const handleSearchPatient = async () => {
   if (!patient) {
     patientForm.id = null;
     patientForm.idCard = searchIdCard.value;
+    patientLocked.value = false;
     return ElMessage.warning("未查询到患者档案，可直接新建档案");
   }
-  Object.assign(patientForm, {
-    id: patient.id,
-    name: patient.name || "",
-    idCard: patient.idCard || "",
-    gender: patient.gender || "未知",
-    birthday: patient.birthday || "",
-    phone: patient.phone || "",
-    balance: 0,
-  });
-  ElMessage.success("档案读取成功");
+  applyPatient(patient);
+  patientLocked.value = false;
+  ElMessage.success("档案读取成功，请确认当前患者");
 };
 
 const savePatient = async () => {
@@ -284,15 +441,107 @@ const savePatient = async () => {
         : patientForm.birthday,
     phone: patientForm.phone,
   };
-  const saved = patientForm.id
-    ? await request.put(`/api/patients/${patientForm.id}`, payload)
-    : await request.post("/api/patients", payload);
-  patientForm.id = saved.id;
-  ElMessage.success("患者档案保存成功");
+  const saved = await request.post("/api/patients", payload);
+  applyPatient(saved);
+  patientLocked.value = false;
+  ElMessage.success("患者档案保存成功，请确认当前患者");
+  return saved;
+};
+
+const confirmPatient = async () => {
+  if (!patientForm.id) {
+    const saved = await savePatient();
+    if (!saved?.id) {
+      return ElMessage.warning("患者档案尚未生成，请检查保存结果");
+    }
+  }
+  patientLocked.value = true;
+  ElMessage.success("当前患者已确认，信息已锁定");
+};
+
+const unlockPatient = () => {
+  patientLocked.value = false;
+  rechargeVisible.value = false;
+  balanceRefundVisible.value = false;
+  ElMessage.info("已解除当前患者锁定");
+};
+
+const openRechargeDialog = () => {
+  if (!patientLocked.value || !patientForm.id) {
+    return ElMessage.warning("请先确认当前患者");
+  }
+  rechargeForm.amount = 100;
+  rechargeVisible.value = true;
+};
+
+const submitRecharge = async () => {
+  if (!patientLocked.value || !patientForm.id) {
+    return ElMessage.warning("请先确认当前患者");
+  }
+  if (!rechargeForm.amount || rechargeForm.amount <= 0) {
+    return ElMessage.warning("充值金额必须大于0");
+  }
+  rechargeLoading.value = true;
+  try {
+    const patient = await request.post(`/api/patients/${patientForm.id}/recharge`, null, {
+      params: { amount: rechargeForm.amount },
+    });
+    applyPatient(patient);
+    patientLocked.value = true;
+    rechargeVisible.value = false;
+    ElMessage.success("充值成功");
+  } finally {
+    rechargeLoading.value = false;
+  }
+};
+
+const openBalanceRefundDialog = () => {
+  if (!patientLocked.value || !patientForm.id) {
+    return ElMessage.warning("请先确认当前患者");
+  }
+  const currentBalance = Number(patientForm.balance || 0);
+  if (currentBalance <= 0) {
+    return ElMessage.warning("当前患者就诊卡余额不足");
+  }
+  balanceRefundForm.amount = Math.min(100, currentBalance);
+  balanceRefundForm.reason = "";
+  balanceRefundVisible.value = true;
+};
+
+const submitBalanceRefund = async () => {
+  if (!patientLocked.value || !patientForm.id) {
+    return ElMessage.warning("请先确认当前患者");
+  }
+  if (!balanceRefundForm.amount || balanceRefundForm.amount <= 0) {
+    return ElMessage.warning("退费金额必须大于0");
+  }
+  if (balanceRefundForm.amount > Number(patientForm.balance || 0)) {
+    return ElMessage.warning("退费金额不能超过当前余额");
+  }
+  balanceRefundLoading.value = true;
+  try {
+    const patient = await request.post(
+      `/api/patients/${patientForm.id}/balance/refund`,
+      null,
+      {
+        params: {
+          amount: balanceRefundForm.amount,
+          reason: balanceRefundForm.reason || undefined,
+        },
+      },
+    );
+    applyPatient(patient);
+    patientLocked.value = true;
+    balanceRefundVisible.value = false;
+    ElMessage.success("退费成功");
+  } finally {
+    balanceRefundLoading.value = false;
+  }
 };
 
 // ===== 排班挂号逻辑 =====
-const scheduleQuery = reactive({ department: "", doctorName: "", date: "" });
+const DEFAULT_OUTPATIENT_DEPARTMENT = "心血管内科";
+const scheduleQuery = reactive({ department: DEFAULT_OUTPATIENT_DEPARTMENT, doctorName: "", date: "" });
 const scheduleList = ref([]);
 const selectedScheduleId = ref(null);
 const selectedSchedule = ref(null);
@@ -328,6 +577,7 @@ const fetchSchedules = async (resetPage = false) => {
         department: scheduleQuery.department,
         doctorName: scheduleQuery.doctorName,
         date: formatDate(scheduleQuery.date),
+        availableOnly: true,
         page: schedulePage.page,
         size: schedulePage.size,
       },
@@ -370,7 +620,7 @@ const handleSelectSchedule = (row) => {
 };
 
 const submitRegistration = async () => {
-  if (!patientForm.id) return ElMessage.warning("请先读取或保存患者档案");
+  if (!patientLocked.value) return ElMessage.warning("请先确认当前患者");
   const reg = await request.post("/api/patients/registrations", {
     patientId: patientForm.id,
     doctorId: selectedSchedule.value.doctorId,

@@ -52,7 +52,7 @@ public class PharmacyController {
                                                             @Parameter(description = "药品名称关键字") @RequestParam(required = false) String nameKeyword,
                                                             @Parameter(description = "是否只看库存预警") @RequestParam(required = false) Boolean warningOnly,
                                                             @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
-                                                            @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
+                                                            @Parameter(description = "每页条数，最大 50") @RequestParam(defaultValue = "10") long size) {
         return ApiResponse.ok(service.inventory(codeKeyword, nameKeyword, warningOnly, page, size));
     }
 

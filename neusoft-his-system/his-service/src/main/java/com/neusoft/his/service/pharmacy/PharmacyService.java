@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.DrugCatalog;
@@ -118,7 +119,7 @@ public class PharmacyService {
     }
 
     public PageResponse<DrugCatalog> inventory(String codeKeyword, String nameKeyword, Boolean warningOnly, long page, long size) {
-        Page<DrugCatalog> pageParam = new Page<>(page, size);
+        Page<DrugCatalog> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<DrugCatalog> query = new QueryWrapper<>();
         if (StringUtils.isNotBlank(codeKeyword)) {
             query.like("code", codeKeyword.trim());

@@ -3,6 +3,7 @@ package com.neusoft.his.service.finance;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.BillingRecord;
@@ -149,7 +150,7 @@ public class FinanceService {
     }
 
     public PageResponse<FinancialTransaction> report(String date, long page, long size) {
-        Page<FinancialTransaction> pageParam = new Page<>(page, size);
+        Page<FinancialTransaction> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<FinancialTransaction> query = new QueryWrapper<>();
         if (StringUtils.isNotBlank(date)) {
             query.likeRight("created_at", date);
@@ -160,7 +161,7 @@ public class FinanceService {
     }
 
     public PageResponse<BillingRecord> bills(String status, String keyword, String patientKeyword, long page, long size) {
-        Page<BillingRecord> pageParam = new Page<>(page, size);
+        Page<BillingRecord> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<BillingRecord> query = new QueryWrapper<>();
         if (StringUtils.isNotBlank(status)) {
             query.eq("status", status);
