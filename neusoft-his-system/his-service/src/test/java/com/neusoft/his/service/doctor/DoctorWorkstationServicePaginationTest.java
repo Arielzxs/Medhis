@@ -6,6 +6,7 @@ import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.dal.view.DoctorScheduleView;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
 import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
+import com.neusoft.his.dal.mapper.DoctorScheduleMapper.ScheduleRegistrationCount;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
@@ -37,20 +38,23 @@ class DoctorWorkstationServicePaginationTest {
 
         DoctorScheduleView view = new DoctorScheduleView(
                 1L, 11L, "2026-06-28", "上午", "心血管内科", "张医生", "张医生",
-                "主任医师", "上午", "专家号", 20, 6, 1
+                "主任医师", "上午", "专家号", 20, 20, 1
         );
         when(scheduleMapper.selectSchedulePage(any(Page.class), eq("心血管内科"), eq("张"), eq("2026-06-28")))
                 .thenReturn(List.of(view));
         when(scheduleMapper.countSchedulePage("心血管内科", "张", "2026-06-28")).thenReturn(1L);
+        when(scheduleMapper.countRegistrationsForSchedules(List.of(view)))
+                .thenReturn(List.of(new ScheduleRegistrationCount(11L, "2026-06-28", 14L)));
 
         PageResponse<DoctorScheduleView> response = service.scheduleQuery("心血管内科", "张", "2026-06-28", 2, 5);
 
-        assertThat(response.records()).containsExactly(view);
+        assertThat(response.records()).singleElement().satisfies(item -> assertThat(item.remain()).isEqualTo(6));
         assertThat(response.total()).isEqualTo(1);
         assertThat(response.page()).isEqualTo(2);
         assertThat(response.size()).isEqualTo(5);
         verify(scheduleMapper).selectSchedulePage(any(Page.class), eq("心血管内科"), eq("张"), eq("2026-06-28"));
         verify(scheduleMapper).countSchedulePage("心血管内科", "张", "2026-06-28");
+        verify(scheduleMapper).countRegistrationsForSchedules(List.of(view));
         verifyNoInteractions(doctorMapper, registrationMapper);
     }
 }

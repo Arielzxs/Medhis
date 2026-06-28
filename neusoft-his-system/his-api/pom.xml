@@ -29,6 +29,10 @@
             <groupId>com.neusoft</groupId>
             <artifactId>his-service</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

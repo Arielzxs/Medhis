@@ -28,6 +28,12 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 患者管理业务服务。
+ *
+ * <p>负责患者建档、档案查询、挂号、缴费、退号和就诊状态维护。
+ * 该层集中处理业务状态流转，并在关键操作后写入审计日志。</p>
+ */
 @Service
 public class PatientService {
     private final PatientMapper patientMapper;
@@ -171,6 +177,7 @@ public class PatientService {
         }
         query.orderByDesc("created_at");
         registrationMapper.selectPage(pageParam, query);
+        // 只批量加载当前页涉及的患者和医生，避免列表每行触发一次数据库查询。
         Map<Long, Patient> patientMap = batchPatients(pageParam.getRecords());
         Map<Long, DoctorProfile> doctorMap = batchDoctors(pageParam.getRecords());
 

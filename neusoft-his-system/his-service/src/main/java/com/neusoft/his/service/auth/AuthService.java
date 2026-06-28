@@ -25,6 +25,12 @@ import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * 认证与权限业务服务。
+ *
+ * <p>负责账号注册登录、JWT 签发、角色分配和角色权限矩阵维护。
+ * 管理端权限变更会同步写入审计日志，便于后续追踪关键操作。</p>
+ */
 @Service
 public class AuthService {
     private static final Set<String> ALL_ROLES = Set.of(

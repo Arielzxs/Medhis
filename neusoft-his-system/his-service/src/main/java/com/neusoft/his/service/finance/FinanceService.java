@@ -19,6 +19,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * 财务管理业务服务。
+ *
+ * <p>负责处方划价、账单收费、退费、报销、支出登记和财务报表查询。
+ * 所有资金方向明确的动作都会写入财务流水和审计日志。</p>
+ */
 @Service
 public class FinanceService {
     private final BillingRecordMapper billingMapper;

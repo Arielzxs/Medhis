@@ -22,7 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
+/**
+ * 医生工作站业务服务。
+ *
+ * <p>负责医生档案、排班号源、病历、处方和叫号等业务。排班查询面向挂号页，
+ * 因此会特别控制分页和剩余号源统计的查询范围。</p>
+ */
 @Service
 public class DoctorWorkstationService {
     private final DoctorProfileMapper doctorMapper;
@@ -72,7 +81,56 @@ public class DoctorWorkstationService {
         Page<Object> pageParam = new Page<>(safePage, safeSize);
         List<DoctorScheduleView> records = scheduleMapper.selectSchedulePage(pageParam, department, doctorName, date);
         long total = scheduleMapper.countSchedulePage(department, doctorName, date);
-        return new PageResponse<>(safePage, safeSize, total, records);
+        // 剩余号源只基于当前页排班批量统计，避免对全部挂号记录做全表聚合。
+        List<DoctorScheduleView> recordsWithRemain = fillScheduleRemain(records);
+        return new PageResponse<>(safePage, safeSize, total, recordsWithRemain);
+    }
+
+    private List<DoctorScheduleView> fillScheduleRemain(List<DoctorScheduleView> records) {
+        if (records == null || records.isEmpty()) {
+            return List.of();
+        }
+        Map<String, DoctorScheduleMapper.ScheduleRegistrationCount> usedCountMap =
+                scheduleMapper.countRegistrationsForSchedules(records).stream()
+                        .collect(Collectors.toMap(
+                                count -> scheduleKey(count.doctorId(), count.scheduleDate()),
+                                Function.identity(),
+                                (left, right) -> left
+                        ));
+        return records.stream()
+                .map(record -> withRemain(record, usedCountMap))
+                .collect(Collectors.toList());
+    }
+
+    private DoctorScheduleView withRemain(DoctorScheduleView record,
+                                          Map<String, DoctorScheduleMapper.ScheduleRegistrationCount> usedCountMap) {
+        long usedCount = usedCountMap.getOrDefault(
+                scheduleKey(record.doctorId(), record.scheduleDate()),
+                new DoctorScheduleMapper.ScheduleRegistrationCount(record.doctorId(), record.scheduleDate(), 0L)
+        ).usedCount();
+        int limit = record.limit() == null ? 0 : record.limit();
+        int remain = record.status() != null && record.status() == 0
+                ? 0
+                : Math.max((int) (limit - Math.min(usedCount, limit)), 0);
+        return new DoctorScheduleView(
+                record.id(),
+                record.doctorId(),
+                record.scheduleDate(),
+                record.shift(),
+                record.department(),
+                record.doctorName(),
+                record.name(),
+                record.title(),
+                record.attendanceStatus(),
+                record.level(),
+                record.limit(),
+                remain,
+                record.status()
+        );
+    }
+
+    private String scheduleKey(Long doctorId, String scheduleDate) {
+        return doctorId + "#" + scheduleDate;
     }
 
     @Transactional(rollbackFor = Exception.class)

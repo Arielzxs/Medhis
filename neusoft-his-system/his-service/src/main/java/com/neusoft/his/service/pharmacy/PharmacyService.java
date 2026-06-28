@@ -20,6 +20,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 药房管理业务服务。
+ *
+ * <p>负责药品目录、供应商、库存入库/盘点、处方审核和发药。
+ * 发药时会校验库存并扣减数量，保证库存数据与处方状态同步。</p>
+ */
 @Service
 public class PharmacyService {
     private final DrugCatalogMapper drugMapper;

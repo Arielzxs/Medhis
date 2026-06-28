@@ -15,6 +15,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * 统计分析业务服务。
+ *
+ * <p>面向首页看板和统计报表，汇总门诊量、医生工作量、收入支出和库存预警等运营指标。</p>
+ */
 @Service
 public class AnalyticsService {
     private final OutpatientRegistrationMapper registrationMapper;

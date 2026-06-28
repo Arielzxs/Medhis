@@ -19,4 +19,9 @@ public interface DoctorScheduleMapper extends BaseMapper<DoctorSchedule> {
     long countSchedulePage(@Param("department") String department,
                            @Param("doctorName") String doctorName,
                            @Param("date") String date);
+
+    List<ScheduleRegistrationCount> countRegistrationsForSchedules(@Param("schedules") List<DoctorScheduleView> schedules);
+
+    record ScheduleRegistrationCount(Long doctorId, String scheduleDate, Long usedCount) {
+    }
 }

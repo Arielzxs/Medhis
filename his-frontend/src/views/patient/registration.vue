@@ -123,14 +123,19 @@
               />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="fetchSchedules"
-                >查询排班</el-button
+              <el-button
+                type="primary"
+                :loading="scheduleLoading"
+                @click="fetchSchedules(true)"
               >
+                查询排班
+              </el-button>
             </el-form-item>
           </el-form>
 
           <el-table
             :data="scheduleList"
+            v-loading="scheduleLoading"
             border
             stripe
             highlight-current-row
@@ -198,6 +203,7 @@
               :total="schedulePage.total"
               @current-change="fetchSchedules"
               @size-change="handleSchedulePageSizeChange"
+              :disabled="scheduleLoading"
             />
           </div>
 
@@ -213,7 +219,7 @@
             <el-button
               type="success"
               size="large"
-              :disabled="!selectedSchedule || !patientForm.id"
+              :disabled="scheduleLoading || !selectedSchedule || !patientForm.id"
               @click="submitRegistration"
             >
               确认挂号并缴费
@@ -290,6 +296,8 @@ const scheduleQuery = reactive({ department: "", doctorName: "", date: "" });
 const scheduleList = ref([]);
 const selectedScheduleId = ref(null);
 const selectedSchedule = ref(null);
+const scheduleLoading = ref(false);
+let scheduleRequestId = 0;
 const schedulePage = reactive({
   page: 1,
   size: 10,
@@ -302,18 +310,30 @@ const doctorFee = (title = "") => {
   return 20;
 };
 
-const fetchSchedules = async () => {
-  const res = await request.get("/api/doctors/schedules", {
-    params: {
-      department: scheduleQuery.department,
-      doctorName: scheduleQuery.doctorName,
-      date: scheduleQuery.date,
-      page: schedulePage.page,
-      size: schedulePage.size,
-    },
-  });
-  scheduleList.value = (res.records || [])
-    .map((schedule) => ({
+const formatDate = (value) => {
+  if (!value) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return value;
+};
+
+const fetchSchedules = async (resetPage = false) => {
+  if (resetPage === true) {
+    schedulePage.page = 1;
+  }
+  const requestId = ++scheduleRequestId;
+  scheduleLoading.value = true;
+  try {
+    const res = await request.get("/api/doctors/schedules", {
+      params: {
+        department: scheduleQuery.department,
+        doctorName: scheduleQuery.doctorName,
+        date: formatDate(scheduleQuery.date),
+        page: schedulePage.page,
+        size: schedulePage.size,
+      },
+    });
+    if (requestId !== scheduleRequestId) return;
+    scheduleList.value = (res.records || []).map((schedule) => ({
       id: schedule.id,
       doctorId: schedule.doctorId,
       scheduleDate: schedule.scheduleDate,
@@ -324,13 +344,19 @@ const fetchSchedules = async () => {
       fee: doctorFee(schedule.title),
       remain: schedule.status === 0 ? 0 : (schedule.remain ?? schedule.limit ?? 0),
     }));
-  schedulePage.total = res.total || 0;
-  selectedScheduleId.value = null;
-  selectedSchedule.value = null;
+    schedulePage.total = res.total || 0;
+    selectedScheduleId.value = null;
+    selectedSchedule.value = null;
+  } finally {
+    if (requestId === scheduleRequestId) {
+      scheduleLoading.value = false;
+    }
+  }
 };
 
-const handleSchedulePageSizeChange = () => {
+const handleSchedulePageSizeChange = (size) => {
   schedulePage.page = 1;
+  schedulePage.size = size;
   fetchSchedules();
 };
 
@@ -349,7 +375,10 @@ const submitRegistration = async () => {
     patientId: patientForm.id,
     doctorId: selectedSchedule.value.doctorId,
     department: selectedSchedule.value.department,
-    scheduleDate: selectedSchedule.value.scheduleDate || scheduleQuery.date || new Date().toISOString().slice(0, 10),
+    scheduleDate:
+      selectedSchedule.value.scheduleDate ||
+      formatDate(scheduleQuery.date) ||
+      new Date().toISOString().slice(0, 10),
     fee: selectedSchedule.value.fee,
   });
   await request.post(`/api/patients/registrations/${reg.id}/pay`);
