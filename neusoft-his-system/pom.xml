@@ -33,6 +33,7 @@
         <jjwt.version>0.12.5</jjwt.version>
         <kaptcha.version>2.3.2</kaptcha.version>
         <google.genai.version>0.4.0</google.genai.version>
+        <knife4j.version>4.5.0</knife4j.version>
         <his.version>1.0.0.0</his.version>
     </properties>
 
@@ -62,6 +63,11 @@
                 <groupId>com.github.penggle</groupId>
                 <artifactId>kaptcha</artifactId>
                 <version>${kaptcha.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>${knife4j.version}</version>
             </dependency>
 
             <dependency>

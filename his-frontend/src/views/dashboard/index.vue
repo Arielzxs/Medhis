@@ -190,37 +190,19 @@ const fetchDashboardData = async () => {
   try {
     const [
       dashboard,
-      registrations,
       warnings,
-      reports,
       auditLogs,
     ] = await Promise.all([
       hasRole("ADMIN") ? request.get("/api/analytics/dashboard") : Promise.resolve({}),
-      hasAnyRole(["REGISTRAR", "DOCTOR", "FINANCE"])
-        ? request.get("/api/patients/registrations", {
-            params: { page: 1, size: 200 },
-          })
-        : Promise.resolve({ records: [] }),
       hasRole("PHARMACY_ADMIN")
         ? request.get("/api/pharmacy/inventory/warnings")
         : Promise.resolve([]),
-      hasRole("FINANCE")
-        ? request.get("/api/finance/reports", { params: { page: 1, size: 200 } })
-        : Promise.resolve({ records: [] }),
-      hasRole("ADMIN") ? request.get("/api/audit/logs") : Promise.resolve([]),
+      hasRole("ADMIN") ? request.get("/api/audit/logs", { params: { page: 1, size: 5 } }) : Promise.resolve({ records: [] }),
     ]);
 
-    const today = new Date().toISOString().slice(0, 10);
-    const regRecords = registrations.records || [];
-    stats.todayRegistrations = regRecords.filter((item) =>
-      item.createdAt?.startsWith(today),
-    ).length;
-    stats.waitingPatients = regRecords.filter((item) =>
-      ["待缴费", "待诊", "待诊中"].includes(item.status),
-    ).length;
-    stats.todayIncome = (reports.records || [])
-      .filter((item) => item.direction === "IN" && item.createdAt?.startsWith(today))
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    stats.todayRegistrations = Number(dashboard.todayRegistrations || 0);
+    stats.waitingPatients = Number(dashboard.waitingPatients || 0);
+    stats.todayIncome = Number(dashboard.todayIncome || 0);
     stats.stockWarnings = warnings.length || 0;
 
     const warningTasks = hasRole("PHARMACY_ADMIN")
@@ -253,7 +235,7 @@ const fetchDashboardData = async () => {
     ];
 
     logs.value = hasRole("ADMIN")
-      ? (auditLogs || []).slice(0, 5).map((log) => ({
+      ? (auditLogs.records || []).map((log) => ({
           content: `${log.operation || "系统操作"}：${log.detail || ""}`,
           time: log.time,
           type: "primary",

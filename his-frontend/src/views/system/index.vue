@@ -126,7 +126,110 @@
           </el-table>
         </el-tab-pane>
 
-        <!-- ==================== 2. 角色权限矩阵配置 ==================== -->
+        <!-- ==================== 2. 医生档案管理 ==================== -->
+        <el-tab-pane label="医生档案管理" name="doctorProfiles">
+          <div class="filter-box">
+            <el-form :inline="true" :model="doctorProfileQuery">
+              <el-form-item label="科室">
+                <el-select
+                  v-model="doctorProfileQuery.department"
+                  placeholder="全部科室"
+                  clearable
+                  style="width: 160px"
+                >
+                  <el-option
+                    v-for="department in departments"
+                    :key="department"
+                    :label="department"
+                    :value="department"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="在岗状态">
+                <el-select
+                  v-model="doctorProfileQuery.attendanceStatus"
+                  placeholder="全部状态"
+                  clearable
+                  style="width: 140px"
+                >
+                  <el-option label="待完善" value="待完善" />
+                  <el-option label="在岗" value="在岗" />
+                  <el-option label="停诊" value="停诊" />
+                  <el-option label="离职" value="离职" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="关键字">
+                <el-input
+                  v-model="doctorProfileQuery.keyword"
+                  placeholder="姓名或专长"
+                  clearable
+                  style="width: 180px"
+                />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" icon="Search" @click="fetchDoctorProfiles"
+                  >查询</el-button
+                >
+                <el-button type="success" icon="Plus" @click="openDoctorProfileDialog()"
+                  >新增医生档案</el-button
+                >
+              </el-form-item>
+            </el-form>
+          </div>
+
+          <el-table
+            :data="pagedDoctorProfiles"
+            border
+            stripe
+            style="width: 100%"
+            v-loading="loadingDoctorProfiles"
+            :header-cell-style="{ background: '#f5f7fa', color: '#606266' }"
+          >
+            <el-table-column prop="name" label="医生姓名" align="center" width="120" />
+            <el-table-column prop="department" label="所属科室" align="center" width="140" />
+            <el-table-column prop="title" label="职称" align="center" width="120" />
+            <el-table-column prop="specialty" label="专业特长" header-align="center" />
+            <el-table-column label="关联账号" align="center" width="140">
+              <template #default="{ row }">
+                <template v-if="row.userId && accountMap[row.userId]">
+                  <el-tag type="primary" effect="light" size="small">
+                    {{ accountMap[row.userId].empNo }} {{ accountMap[row.userId].name }}
+                  </el-tag>
+                </template>
+                <span v-else class="text-muted">未关联</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="attendanceStatus" label="在岗状态" align="center" width="120">
+              <template #default="{ row }">
+                <el-tag :type="doctorStatusType(row.attendanceStatus)" effect="light">
+                  {{ row.attendanceStatus || "待完善" }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" align="center" width="160" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="openDoctorDetail(row)"
+                  >详情</el-button
+                >
+                <el-button type="primary" link size="small" @click="openDoctorProfileDialog(row)"
+                  >编辑</el-button
+                >
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="doctorProfilePage.page"
+              v-model:page-size="doctorProfilePage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="doctorProfiles.length"
+            />
+          </div>
+        </el-tab-pane>
+
+        <!-- ==================== 3. 角色权限矩阵配置 ==================== -->
         <el-tab-pane label="角色权限矩阵配置" name="roles">
           <el-row :gutter="20" class="role-matrix-container">
             <el-col :span="8">
@@ -203,7 +306,7 @@
           </el-row>
         </el-tab-pane>
 
-        <!-- ==================== 3. 系统安全审计日志 ==================== -->
+        <!-- ==================== 4. 系统安全审计日志 ==================== -->
         <el-tab-pane label="系统安全审计日志" name="logs">
           <div class="log-header">
             <span class="log-desc"
@@ -268,6 +371,18 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="logPage.page"
+              v-model:page-size="logPage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="logPage.total"
+              @current-change="fetchLogs"
+              @size-change="handleLogPageSizeChange"
+            />
+          </div>
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -352,6 +467,170 @@
         >
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="doctorProfileDialogVisible"
+      :title="doctorProfileForm.id ? '编辑医生档案' : '新增医生档案'"
+      width="560px"
+      destroy-on-close
+    >
+      <el-form
+        ref="doctorProfileFormRef"
+        :model="doctorProfileForm"
+        :rules="doctorProfileRules"
+        label-width="108px"
+      >
+        <el-form-item label="医生姓名" prop="name">
+          <el-input v-model.trim="doctorProfileForm.name" placeholder="请输入医生姓名" />
+        </el-form-item>
+        <el-form-item label="关联职工账号">
+          <el-select
+            v-model="doctorProfileForm.userId"
+            placeholder="选择关联的登录账号（可选）"
+            clearable
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="user in doctorAccountCandidates"
+              :key="user.id"
+              :label="`${user.username} — ${user.name}`"
+              :value="user.id"
+              :disabled="user._alreadyLinked"
+            >
+              <span>{{ user.username }} — {{ user.name }}</span>
+              <el-tag v-if="user._alreadyLinked" type="warning" size="small" style="margin-left: 8px">已被关联</el-tag>
+            </el-option>
+          </el-select>
+          <span class="form-tip">不选则医生暂无登录权限，后续可在编辑时补充</span>
+        </el-form-item>
+        <el-form-item label="所属科室" prop="department">
+          <el-select
+            v-model="doctorProfileForm.department"
+            placeholder="请选择科室"
+            filterable
+            allow-create
+            style="width: 100%"
+          >
+            <el-option
+              v-for="dep in departments"
+              :key="dep"
+              :label="dep"
+              :value="dep"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="职称" prop="title">
+          <el-select v-model="doctorProfileForm.title" placeholder="请选择职称" style="width: 100%">
+            <el-option label="医师" value="医师" />
+            <el-option label="主治医师" value="主治医师" />
+            <el-option label="副主任医师" value="副主任医师" />
+            <el-option label="主任医师" value="主任医师" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="专业特长" prop="specialty">
+          <el-input
+            v-model.trim="doctorProfileForm.specialty"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入专业特长"
+          />
+        </el-form-item>
+        <el-form-item label="在岗状态" prop="attendanceStatus">
+          <el-radio-group v-model="doctorProfileForm.attendanceStatus">
+            <el-radio label="待完善" />
+            <el-radio label="在岗" />
+            <el-radio label="停诊" />
+            <el-radio label="离职" />
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="doctorProfileDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingDoctorProfile" @click="submitDoctorProfile"
+          >保存档案</el-button
+        >
+      </template>
+    </el-dialog>
+
+    <!-- ==================== 医生详情抽屉 ==================== -->
+    <el-drawer
+      v-model="doctorDetailVisible"
+      :title="doctorDetail?.name || '医生详情'"
+      size="520px"
+      destroy-on-close
+    >
+      <template v-if="doctorDetail">
+        <el-descriptions :column="1" border style="margin-bottom: 20px">
+          <el-descriptions-item label="医生姓名">
+            {{ doctorDetail.name }}
+          </el-descriptions-item>
+          <el-descriptions-item label="所属科室">
+            {{ doctorDetail.department || "未填写" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="职称">
+            {{ doctorDetail.title || "未填写" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="在岗状态">
+            <el-tag :type="doctorStatusType(doctorDetail.attendanceStatus)" effect="light">
+              {{ doctorDetail.attendanceStatus || "待完善" }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="专业特长">
+            {{ doctorDetail.specialty || "未填写" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="关联登录账号">
+            <template v-if="doctorDetail.userId && accountMap[doctorDetail.userId]">
+              <el-tag type="primary" effect="light">
+                {{ accountMap[doctorDetail.userId].empNo }} — {{ accountMap[doctorDetail.userId].name }}
+              </el-tag>
+              <span style="margin-left: 4px; font-size: 12px; color: #909399">
+                (角色: {{ accountMap[doctorDetail.userId].role }})
+              </span>
+            </template>
+            <span v-else class="text-muted">未关联 — 该医生暂无系统登录权限</span>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-divider content-position="left">排班概况</el-divider>
+        <div v-loading="loadingDoctorSchedules" style="min-height: 80px">
+          <el-empty v-if="!loadingDoctorSchedules && !doctorSchedules.length" description="暂无排班记录" />
+          <el-timeline v-else-if="!loadingDoctorSchedules">
+            <el-timeline-item
+              v-for="schedule in doctorSchedules.slice(0, 10)"
+              :key="schedule.id"
+              :timestamp="schedule.scheduleDate"
+              placement="top"
+            >
+              <el-card shadow="hover" style="margin-bottom: 8px">
+                <div>{{ schedule.shift || '全天' }} · {{ schedule.department || doctorDetail.department }}</div>
+                <div style="font-size: 12px; color: #909399; margin-top: 4px">
+                  号别: {{ schedule.level === 1 ? '专家号' : '普通号' }} |
+                  限额: {{ schedule.limit ?? '—' }} |
+                  剩余: {{ schedule.remain ?? '—' }} |
+                  <el-tag :type="schedule.status === 1 ? 'success' : 'info'" size="small" effect="plain">
+                    {{ schedule.status === 1 ? '正常' : '停诊' }}
+                  </el-tag>
+                </div>
+              </el-card>
+            </el-timeline-item>
+          </el-timeline>
+          <div v-if="doctorSchedules.length > 10" style="text-align: center; margin-top: 8px; color: #909399; font-size: 12px">
+            仅展示最近 10 条，共 {{ doctorSchedules.length }} 条排班记录
+          </div>
+        </div>
+
+        <el-divider content-position="left">接诊统计</el-divider>
+        <div v-loading="loadingDoctorWorkload" style="min-height: 80px">
+          <el-empty v-if="!loadingDoctorWorkload && doctorWorkloadCount === null" description="暂无接诊统计数据" />
+          <el-row v-else-if="!loadingDoctorWorkload" :gutter="16">
+            <el-col :span="12">
+              <el-statistic title="累计接诊人次" :value="doctorWorkloadCount" />
+            </el-col>
+          </el-row>
+        </div>
+      </template>
+    </el-drawer>
 
     <el-dialog
       v-model="passwordDialogVisible"
@@ -596,6 +875,238 @@ const getRoleType = (role) => {
   return map[role] || "info";
 };
 
+// ===== 医生档案管理数据 =====
+const doctorProfileQuery = reactive({
+  department: "",
+  attendanceStatus: "",
+  keyword: "",
+});
+const doctorProfiles = ref([]);
+const loadingDoctorProfiles = ref(false);
+const savingDoctorProfile = ref(false);
+const doctorProfileDialogVisible = ref(false);
+const doctorProfileFormRef = ref();
+const doctorProfileForm = reactive({
+  id: null,
+  userId: null,
+  name: "",
+  department: "",
+  title: "医师",
+  specialty: "未填写",
+  attendanceStatus: "待完善",
+});
+const doctorProfileRules = {
+  name: [{ required: true, message: "请输入医生姓名", trigger: "blur" }],
+  department: [{ required: true, message: "请选择医生所属科室", trigger: "change" }],
+  title: [{ required: true, message: "请选择医生职称", trigger: "change" }],
+  attendanceStatus: [{ required: true, message: "请选择在岗状态", trigger: "change" }],
+};
+
+// 科室列表从档案数据动态提取，保留兜底值
+const departments = ref(["待分配", "心血管内科", "儿科", "消化内科", "普外科"]);
+// 所有职工账号映射 { userId: { id, username, name, role } }
+const accountMap = ref({});
+// 可关联的医生候选账号（角色为 DOCTOR 的职工）
+const doctorAccountCandidates = ref([]);
+
+const doctorProfilePage = reactive({ page: 1, size: 10 });
+const pagedDoctorProfiles = computed(() => {
+  const start = (doctorProfilePage.page - 1) * doctorProfilePage.size;
+  return doctorProfiles.value.slice(start, start + doctorProfilePage.size);
+});
+
+// ===== 医生详情抽屉数据 =====
+const doctorDetailVisible = ref(false);
+const doctorDetail = ref(null);
+const doctorSchedules = ref([]);
+const doctorWorkloadCount = ref(null);
+const loadingDoctorSchedules = ref(false);
+const loadingDoctorWorkload = ref(false);
+
+const buildAccountMap = async () => {
+  try {
+    const users = await request.get("/api/auth/users");
+    const map = {};
+    const doctorCandidates = [];
+    (users || []).forEach((user) => {
+      const roles = user.roles || [];
+      map[user.id] = {
+        id: user.id,
+        empNo: user.username,
+        name: user.name,
+        role: roles.map(roleLabel).join("、") || "未分配",
+        roles,
+      };
+      // 筛选角色包含 DOCTOR 的职工作为候选
+      if (roles.includes("DOCTOR")) {
+        doctorCandidates.push({ ...user, _alreadyLinked: false });
+      }
+    });
+    accountMap.value = map;
+    doctorAccountCandidates.value = doctorCandidates;
+  } catch {
+    // 账号列表加载失败不影响主流程
+  }
+};
+
+// 标记已被其他档案关联的账号
+const markLinkedAccounts = () => {
+  const candidates = doctorAccountCandidates.value.map((u) => ({
+    ...u,
+    _alreadyLinked: false,
+  }));
+  doctorProfiles.value.forEach((profile) => {
+    if (profile.userId) {
+      const idx = candidates.findIndex((u) => u.id === profile.userId);
+      if (idx >= 0 && profile.id !== doctorProfileForm.id) {
+        candidates[idx]._alreadyLinked = true;
+      }
+    }
+  });
+  doctorAccountCandidates.value = candidates;
+};
+
+const fetchDoctorProfiles = async () => {
+  loadingDoctorProfiles.value = true;
+  try {
+    const data = await request.get("/api/doctors/profiles", {
+      params: {
+        department: doctorProfileQuery.department || undefined,
+        attendanceStatus: doctorProfileQuery.attendanceStatus || undefined,
+        keyword: doctorProfileQuery.keyword || undefined,
+      },
+    });
+    doctorProfiles.value = data || [];
+    // 从档案数据中提取科室到下拉列表
+    const dynamicDepts = new Set(departments.value);
+    (data || []).forEach((p) => {
+      if (p.department) dynamicDepts.add(p.department);
+    });
+    departments.value = [...dynamicDepts];
+    doctorProfilePage.page = 1;
+    // 更新账号关联标记
+    markLinkedAccounts();
+  } finally {
+    loadingDoctorProfiles.value = false;
+  }
+};
+
+const resetDoctorProfileForm = () => {
+  Object.assign(doctorProfileForm, {
+    id: null,
+    userId: null,
+    name: "",
+    department: "待分配",
+    title: "医师",
+    specialty: "未填写",
+    attendanceStatus: "待完善",
+  });
+};
+
+const openDoctorProfileDialog = (row) => {
+  if (row) {
+    Object.assign(doctorProfileForm, {
+      id: row.id,
+      userId: row.userId || null,
+      name: row.name,
+      department: row.department || "待分配",
+      title: row.title || "医师",
+      specialty: row.specialty || "未填写",
+      attendanceStatus: row.attendanceStatus || "待完善",
+    });
+  } else {
+    resetDoctorProfileForm();
+  }
+  markLinkedAccounts();
+  doctorProfileDialogVisible.value = true;
+};
+
+const submitDoctorProfile = async () => {
+  await doctorProfileFormRef.value?.validate();
+  savingDoctorProfile.value = true;
+  try {
+    await request.post("/api/doctors", {
+      id: doctorProfileForm.id || null,
+      userId: doctorProfileForm.userId || null,
+      name: doctorProfileForm.name,
+      department: doctorProfileForm.department,
+      title: doctorProfileForm.title,
+      specialty: doctorProfileForm.specialty || "未填写",
+      attendanceStatus: doctorProfileForm.attendanceStatus,
+    });
+    ElMessage.success("医生档案已保存");
+    doctorProfileDialogVisible.value = false;
+    await fetchDoctorProfiles();
+    await buildAccountMap();
+  } finally {
+    savingDoctorProfile.value = false;
+  }
+};
+
+// ===== 医生详情 =====
+const openDoctorDetail = async (row) => {
+  doctorDetail.value = { ...row };
+  doctorDetailVisible.value = true;
+  // 异步加载排班和工作量，不阻塞抽屉打开
+  await Promise.allSettled([
+    fetchSchedulesForDoctor(row),
+    fetchWorkloadForDoctor(row),
+  ]);
+};
+
+const fetchSchedulesForDoctor = async (doctor) => {
+  loadingDoctorSchedules.value = true;
+  try {
+    const res = await request.get("/api/doctors/schedules", {
+      params: {
+        department: doctor.department || undefined,
+        doctorName: doctor.name,
+        page: 1,
+        size: 50,
+      },
+    });
+    doctorSchedules.value = (res?.records || []).filter(
+      (s) => s.doctorName === doctor.name,
+    );
+  } catch {
+    doctorSchedules.value = [];
+  } finally {
+    loadingDoctorSchedules.value = false;
+  }
+};
+
+const fetchWorkloadForDoctor = async (doctor) => {
+  loadingDoctorWorkload.value = true;
+  try {
+    const map = await request.get("/api/analytics/doctor-workload");
+    // map 形如 { "Doctor_ID_1": 5, "Doctor_ID_2": 12 }
+    // MedicalRecord.doctorId 可能是 doctorProfile.userId 或 doctorProfile.id，两者都尝试匹配
+    const keysToTry = [];
+    if (doctor.userId) keysToTry.push(`Doctor_ID_${doctor.userId}`);
+    if (doctor.id) keysToTry.push(`Doctor_ID_${doctor.id}`);
+    let count = null;
+    for (const key of keysToTry) {
+      if (map && map[key] !== undefined) {
+        count = map[key];
+        break;
+      }
+    }
+    doctorWorkloadCount.value = count;
+  } catch {
+    doctorWorkloadCount.value = null;
+  } finally {
+    loadingDoctorWorkload.value = false;
+  }
+};
+
+const doctorStatusType = (status) => {
+  if (status === "在岗") return "success";
+  if (status === "待完善") return "warning";
+  if (status === "停诊") return "info";
+  if (status === "离职") return "danger";
+  return "info";
+};
+
 // ===== 角色权限矩阵数据 =====
 const activeRole = ref("ADMIN");
 const loadingPermissions = ref(false);
@@ -760,10 +1271,13 @@ const resetToDefault = async () => {
 
 // ===== 审计日志数据 =====
 const auditLogs = ref([]);
+const logPage = reactive({ page: 1, size: 10, total: 0 });
 
 const fetchLogs = async () => {
-  const res = await request.get("/api/audit/logs");
-  auditLogs.value = (res || []).map((log) => ({
+  const res = await request.get("/api/audit/logs", {
+    params: { page: logPage.page, size: logPage.size },
+  });
+  auditLogs.value = (res.records || []).map((log) => ({
     time: log.time,
     account: log.username || "--",
     ip: "--",
@@ -771,6 +1285,12 @@ const fetchLogs = async () => {
     description: log.detail || "",
     status: "放行成功",
   }));
+  logPage.total = res.total || 0;
+};
+
+const handleLogPageSizeChange = () => {
+  logPage.page = 1;
+  fetchLogs();
 };
 
 const clearLogs = async () => {
@@ -792,6 +1312,7 @@ onMounted(() => {
   fetchAccounts();
   fetchRoleMatrix();
   fetchLogs();
+  buildAccountMap();
 });
 </script>
 
@@ -820,6 +1341,12 @@ onMounted(() => {
   font-size: 18px;
   font-weight: bold;
   color: #303133;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .system-tabs {
@@ -918,5 +1445,18 @@ onMounted(() => {
 .log-desc {
   font-size: 13px;
   color: #f56c6c;
+}
+
+.form-tip {
+  display: block;
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.text-muted {
+  color: #909399;
+  font-size: 12px;
 }
 </style>

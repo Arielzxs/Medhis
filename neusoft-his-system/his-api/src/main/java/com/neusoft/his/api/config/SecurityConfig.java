@@ -16,6 +16,12 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * Web 安全配置。
+ *
+ * <p>系统前后端分离，HTTP 层禁用表单登录和 Session；JWT 解析由
+ * {@link SecurityContextFilter} 完成，细粒度角色校验交给 {@link RbacInterceptor}。</p>
+ */
 @Configuration
 public class SecurityConfig implements WebMvcConfigurer {
     @Value("${his.security.jwt-secret}")

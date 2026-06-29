@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neusoft.his.dal.mapper.DoctorScheduleMapper">
+
+    <sql id="scheduleWhere">
+        <where>
+            <if test="date != null and date != ''">
+                AND ds.schedule_date = #{date}
+            </if>
+            <if test="department != null and department != ''">
+                AND dp.department = #{department}
+            </if>
+            <if test="doctorName != null and doctorName != ''">
+                AND dp.name LIKE CONCAT('%', #{doctorName}, '%')
+            </if>
+            <if test="availableOnly">
+                AND ds.status = 1
+                AND ds.schedule_date &gt;= DATE_FORMAT(CURDATE(), '%Y-%m-%d')
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectSchedulePage" resultType="com.neusoft.his.dal.view.DoctorScheduleView">
+        SELECT
+            ds.id,
+            ds.doctor_id AS doctorId,
+            ds.schedule_date AS scheduleDate,
+            ds.shift,
+            dp.department,
+            dp.name AS doctorName,
+            dp.name AS name,
+            dp.title,
+            CASE WHEN ds.status = 0 THEN '停诊' ELSE ds.shift END AS attendanceStatus,
+            ds.level,
+            COALESCE(ds.registration_limit, 0) AS `limit`,
+            COALESCE(ds.registration_limit, 0) AS remain,
+            ds.status
+        FROM doctor_schedule ds
+        INNER JOIN doctor_profile dp ON dp.id = ds.doctor_id
+        <include refid="scheduleWhere"/>
+        <choose>
+            <when test="availableOnly">
+                ORDER BY ds.schedule_date ASC, ds.shift ASC, ds.created_at DESC
+            </when>
+            <otherwise>
+                ORDER BY ds.schedule_date DESC, ds.shift ASC, ds.created_at DESC
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="countSchedulePage" resultType="long">
+        SELECT COUNT(1)
+        FROM doctor_schedule ds
+        INNER JOIN doctor_profile dp ON dp.id = ds.doctor_id
+        <include refid="scheduleWhere"/>
+    </select>
+
+    <select id="countRegistrationsForSchedules" resultType="com.neusoft.his.dal.mapper.DoctorScheduleMapper$ScheduleRegistrationCount">
+        SELECT
+            doctor_id AS doctorId,
+            schedule_date AS scheduleDate,
+            COUNT(*) AS usedCount
+        FROM outpatient_registration
+        WHERE
+        <foreach collection="schedules" item="schedule" open="(" separator=" OR " close=")">
+            (doctor_id = #{schedule.doctorId} AND schedule_date = #{schedule.scheduleDate})
+        </foreach>
+        AND (status IS NULL OR status NOT IN ('已退号', '已取消', 'CANCELLED'))
+        GROUP BY doctor_id, schedule_date
+    </select>
+</mapper>

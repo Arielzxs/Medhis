@@ -3,6 +3,7 @@ package com.neusoft.his.service.patient;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.OutpatientRegistration;
@@ -16,12 +17,25 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.math.BigDecimal;
 
+/**
+ * 患者管理业务服务。
+ *
+ * <p>负责患者建档、档案查询、挂号、缴费、退号和就诊状态维护。
+ * 该层集中处理业务状态流转，并在关键操作后写入审计日志。</p>
+ */
 @Service
 public class PatientService {
     private final PatientMapper patientMapper;
@@ -44,17 +58,41 @@ public class PatientService {
             throw new BizException("患者姓名不能为空");
         }
 
-        // 2. 自动生成唯一的患者编号 (如果前端未传入)
+        // 2. 按身份证号查重：已存在则更新，不存在则新建
+        if (StringUtils.isNotBlank(patient.getIdCard())) {
+            Patient existing = patientMapper.selectByIdCard(patient.getIdCard());
+            if (existing != null) {
+                patient.setId(existing.getId());
+                patient.setUpdatedAt(LocalDateTime.now());
+                if (StringUtils.isBlank(patient.getPatientNo())) {
+                    patient.setPatientNo(existing.getPatientNo());
+                }
+                if (StringUtils.isBlank(patient.getCurrentStatus())) {
+                    patient.setCurrentStatus(existing.getCurrentStatus());
+                }
+                if (patient.getBalance() == null) {
+                    patient.setBalance(existing.getBalance());
+                }
+                patientMapper.updateById(patient);
+                auditService.log("PATIENT_UPDATE", "患者更新(按身份证号): " + patient.getName() + ", 身份证: " + patient.getIdCard());
+                return patient;
+            }
+        }
+
+        // 3. 自动生成唯一的患者编号 (如果前端未传入)
         if (StringUtils.isBlank(patient.getPatientNo())) {
             patient.setPatientNo(generatePatientNo());
         }
 
-        // 3. 处理默认值，保证与数据库设计一致
+        // 4. 处理默认值，保证与数据库设计一致
         if (StringUtils.isBlank(patient.getGender())) {
             patient.setGender("未知");
         }
         if (StringUtils.isBlank(patient.getCurrentStatus())) {
             patient.setCurrentStatus("正常");
+        }
+        if (patient.getBalance() == null) {
+            patient.setBalance(BigDecimal.ZERO);
         }
 
         patient.setCreatedAt(LocalDateTime.now());
@@ -67,18 +105,58 @@ public class PatientService {
 
     @Transactional(rollbackFor = Exception.class)
     public Patient update(Long id, Patient patient) {
-        Patient old = patientMapper.selectById(id);
+        Patient old = patientMapper.selectByIdCard(patient.getIdCard());
         if (old == null) throw new BizException("患者不存在");
 
         patient.setId(id);
+        if (patient.getBalance() == null) {
+            patient.setBalance(old.getBalance());
+        }
         patient.setUpdatedAt(LocalDateTime.now());
         patientMapper.updateById(patient);
         auditService.log("PATIENT_UPDATE", "更新患者: " + id);
         return patient;
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public Patient recharge(Long id, BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException("充值金额必须大于0");
+        }
+        Patient patient = patientMapper.selectById(id);
+        if (patient == null) {
+            throw new BizException("患者不存在");
+        }
+        BigDecimal currentBalance = patient.getBalance() == null ? BigDecimal.ZERO : patient.getBalance();
+        patient.setBalance(currentBalance.add(amount));
+        patient.setUpdatedAt(LocalDateTime.now());
+        patientMapper.updateById(patient);
+        auditService.log("PATIENT_RECHARGE", "患者充值: " + id + ", 金额: " + amount);
+        return patient;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Patient refundBalance(Long id, BigDecimal amount, String reason) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException("退费金额必须大于0");
+        }
+        Patient patient = patientMapper.selectById(id);
+        if (patient == null) {
+            throw new BizException("患者不存在");
+        }
+        BigDecimal currentBalance = patient.getBalance() == null ? BigDecimal.ZERO : patient.getBalance();
+        if (currentBalance.compareTo(amount) < 0) {
+            throw new BizException("就诊卡余额不足");
+        }
+        patient.setBalance(currentBalance.subtract(amount));
+        patient.setUpdatedAt(LocalDateTime.now());
+        patientMapper.updateById(patient);
+        auditService.log("PATIENT_BALANCE_REFUND", "患者余额退费: " + id + ", 金额: " + amount + ", 原因: " + StringUtils.defaultIfBlank(reason, "未填写"));
+        return patient;
+    }
+
     public PageResponse<Patient> query(String keyword, long page, long size) {
-        Page<Patient> pageParam = new Page<>(page, size);
+        Page<Patient> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<Patient> query = new QueryWrapper<>();
         if (StringUtils.isNotBlank(keyword)) {
             query.like("name", keyword).or().like("patient_no", keyword).or().like("id_card", keyword);
@@ -90,7 +168,7 @@ public class PatientService {
     @Transactional(rollbackFor = Exception.class)
     public OutpatientRegistration register(PatientRegistrationRequest req) {
         Patient patient = patientMapper.selectById(req.patientId());
-        if (patient == null) throw new BizException("患者不存在");
+        if (patient == null) throw new BizException("患者不存在2");
 
         OutpatientRegistration reg = new OutpatientRegistration();
         reg.setPatientId(req.patientId());
@@ -155,7 +233,7 @@ public class PatientService {
     }
 
     public PageResponse<Map<String, Object>> registrations(Long id, String status, long page, long size) {
-        Page<OutpatientRegistration> pageParam = new Page<>(page, size);
+        Page<OutpatientRegistration> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<OutpatientRegistration> query = new QueryWrapper<>();
         if (id != null) {
             query.eq("id", id);
@@ -165,18 +243,49 @@ public class PatientService {
         }
         query.orderByDesc("created_at");
         registrationMapper.selectPage(pageParam, query);
+        // 只批量加载当前页涉及的患者和医生，避免列表每行触发一次数据库查询。
+        Map<Long, Patient> patientMap = batchPatients(pageParam.getRecords());
+        Map<Long, DoctorProfile> doctorMap = batchDoctors(pageParam.getRecords());
 
         return new PageResponse<>(
                 pageParam.getCurrent(),
                 pageParam.getSize(),
                 pageParam.getTotal(),
-                pageParam.getRecords().stream().map(this::toRegistrationView).toList()
+                pageParam.getRecords().stream().map(reg -> toRegistrationView(reg, patientMap, doctorMap)).toList()
         );
     }
 
-    private Map<String, Object> toRegistrationView(OutpatientRegistration reg) {
-        Patient patient = patientMapper.selectById(reg.getPatientId());
-        DoctorProfile doctor = reg.getDoctorId() == null ? null : doctorMapper.selectById(reg.getDoctorId());
+    private Map<Long, Patient> batchPatients(List<OutpatientRegistration> records) {
+        List<Long> patientIds = records.stream()
+                .map(OutpatientRegistration::getPatientId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (patientIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return patientMapper.selectBatchIds(patientIds).stream()
+                .collect(Collectors.toMap(Patient::getId, Function.identity()));
+    }
+
+    private Map<Long, DoctorProfile> batchDoctors(List<OutpatientRegistration> records) {
+        List<Long> doctorIds = records.stream()
+                .map(OutpatientRegistration::getDoctorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (doctorIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return doctorMapper.selectBatchIds(doctorIds).stream()
+                .collect(Collectors.toMap(DoctorProfile::getId, Function.identity()));
+    }
+
+    private Map<String, Object> toRegistrationView(OutpatientRegistration reg,
+                                                   Map<Long, Patient> patientMap,
+                                                   Map<Long, DoctorProfile> doctorMap) {
+        Patient patient = patientMap.get(reg.getPatientId());
+        DoctorProfile doctor = reg.getDoctorId() == null ? null : doctorMap.get(reg.getDoctorId());
 
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("id", reg.getId());
