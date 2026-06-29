@@ -22,9 +22,7 @@
               placeholder="全部科室"
               clearable
             >
-              <el-option label="心血管内科" value="心血管内科" />
-              <el-option label="儿科" value="儿科" />
-              <el-option label="消化内科" value="消化内科" />
+              <el-option v-for="item in departments" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -64,10 +62,12 @@
 import { ref, reactive, onMounted, nextTick } from "vue";
 import * as echarts from "echarts";
 import request from "../../utils/request";
+import { fetchDepartmentOptions } from "../../utils/departments";
 
 const queryParams = reactive({ dateRange: null, department: "" });
 const barChartRef = ref(null);
 const tableData = ref([]);
+const departments = ref([]);
 
 let myChart;
 const initChart = () => {
@@ -108,6 +108,7 @@ const handleSearch = async () => {
 
 onMounted(() => {
   nextTick(async () => {
+    departments.value = await fetchDepartmentOptions();
     initChart();
     await handleSearch();
   });

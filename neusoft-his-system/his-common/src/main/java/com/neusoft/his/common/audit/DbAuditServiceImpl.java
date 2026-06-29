@@ -1,6 +1,8 @@
 package com.neusoft.his.common.audit;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.security.SecurityUser;
 import com.neusoft.his.common.security.SecurityUserHolder;
 import com.neusoft.his.dal.entity.SysAuditLog;
@@ -37,6 +39,15 @@ public class DbAuditServiceImpl implements AuditService {
         return auditMapper.selectList(query).stream()
                 .map(log -> new AuditLogEntry(log.getTime(), log.getUsername(), log.getOperation(), log.getDetail()))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResponse<AuditLogEntry> page(long page, long size) {
+        Page<Object> pageParam = new Page<>(Math.max(page, 1), Math.max(size, 1));
+        List<AuditLogEntry> records = auditMapper.selectAuditPage(pageParam).stream()
+                .map(log -> new AuditLogEntry(log.getTime(), log.getUsername(), log.getOperation(), log.getDetail()))
+                .toList();
+        return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), auditMapper.countAuditPage(), records);
     }
 
     @Override

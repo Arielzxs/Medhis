@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.DrugCatalog;
@@ -20,6 +21,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 药房管理业务服务。
+ *
+ * <p>负责药品目录、供应商、库存入库/盘点、处方审核和发药。
+ * 发药时会校验库存并扣减数量，保证库存数据与处方状态同步。</p>
+ */
 @Service
 public class PharmacyService {
     private final DrugCatalogMapper drugMapper;
@@ -111,9 +118,20 @@ public class PharmacyService {
         auditService.log("DRUG_INBOUND", "入库 drug=" + drugId + " qty=" + quantity);
     }
 
-    public PageResponse<DrugCatalog> inventory(long page, long size) {
-        Page<DrugCatalog> pageParam = new Page<>(page, size);
-        drugMapper.selectPage(pageParam, null);
+    public PageResponse<DrugCatalog> inventory(String codeKeyword, String nameKeyword, Boolean warningOnly, long page, long size) {
+        Page<DrugCatalog> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
+        QueryWrapper<DrugCatalog> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(codeKeyword)) {
+            query.like("code", codeKeyword.trim());
+        }
+        if (StringUtils.isNotBlank(nameKeyword)) {
+            query.like("name", nameKeyword.trim());
+        }
+        if (Boolean.TRUE.equals(warningOnly)) {
+            query.apply("stock <= warning_threshold");
+        }
+        query.orderByAsc("code").orderByDesc("updated_at");
+        drugMapper.selectPage(pageParam, query);
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
     }
 

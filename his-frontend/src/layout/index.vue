@@ -119,17 +119,19 @@ const menus = computed(() => {
   const layoutRoute = router.options.routes.find((r) => r.path === "/");
   if (!layoutRoute) return [];
   return layoutRoute.children
-    .filter((route) => !route.hidden && hasAuth(route.meta?.roles))
+    .filter((route) => !route.hidden && hasAuth(route.meta))
     .map((route) => {
       if (!route.children?.length) return route;
-      const children = route.children.filter((child) => hasAuth(child.meta?.roles));
+      const children = route.children.filter((child) => hasAuth(child.meta));
       return { ...route, children };
     })
     .filter((route) => !route.children || route.children.length > 0);
 });
 
 // 检查当前用户是否有权限访问该路由
-const hasAuth = (roles) => {
+const hasAuth = (meta) => {
+  const roles = meta?.roles;
+  if (meta?.excludeRoles?.some((role) => userStore.roles.includes(role))) return false;
   if (!roles) return true;
   if (userStore.roles.includes("ADMIN")) return true;
   return roles.some((role) => userStore.roles.includes(role));

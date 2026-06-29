@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @EqualsAndHashCode(callSuper = true)
@@ -28,6 +29,9 @@ public class Patient extends BaseEntity {
 
     // 身份证号
     private String idCard;
+
+    // 就诊卡余额
+    private BigDecimal balance = BigDecimal.ZERO;
 
     // 当前就诊阶段状态，数据库初始值为'正常'
     private String currentStatus = "正常";

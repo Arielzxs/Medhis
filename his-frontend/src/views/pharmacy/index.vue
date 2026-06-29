@@ -190,7 +190,7 @@
           </div>
 
           <el-table
-            :data="filteredDrugList"
+            :data="drugList"
             border
             stripe
             style="width: 100%"
@@ -303,6 +303,18 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="inventoryPage.page"
+              v-model:page-size="inventoryPage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="inventoryPage.total"
+              @current-change="fetchDrugs"
+              @size-change="handleInventoryPageSizeChange"
+            />
+          </div>
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -477,8 +489,10 @@ const parseItems = (text) => {
 const fetchPrescriptions = async () => {
   loadingDispense.value = true;
   try {
-    const res = await request.get("/api/doctors/prescriptions");
-    prescriptionList.value = (res || [])
+    const res = await request.get("/api/doctors/prescriptions", {
+      params: { page: 1, size: 20 },
+    });
+    prescriptionList.value = (res.records || [])
       .map((item) => ({
         id: item.id,
         prescriptionNo: `RX${item.id}`,
@@ -587,6 +601,7 @@ const inventoryQuery = reactive({
   showWarningOnly: false,
 });
 const drugList = ref([]);
+const inventoryPage = reactive({ page: 1, size: 10, total: 0 });
 
 const inboundDialogVisible = ref(false);
 const drugDialogVisible = ref(false);
@@ -620,7 +635,13 @@ const fetchDrugs = async () => {
   loadingInventory.value = true;
   try {
     const res = await request.get("/api/pharmacy/inventory", {
-      params: { page: 1, size: 100 },
+      params: {
+        codeKeyword: inventoryQuery.drugCode || undefined,
+        nameKeyword: inventoryQuery.drugName || undefined,
+        warningOnly: inventoryQuery.showWarningOnly || undefined,
+        page: inventoryPage.page,
+        size: inventoryPage.size,
+      },
     });
     drugList.value = (res.records || [])
       .map((item) => ({
@@ -633,27 +654,17 @@ const fetchDrugs = async () => {
         price: Number(item.price || 0),
         stock: item.stock || 0,
         warningThreshold: item.warningThreshold || 0,
-      }))
-      .filter((item) => {
-        const codeMatched = inventoryQuery.drugCode
-          ? item.drugCode?.includes(inventoryQuery.drugCode)
-          : true;
-        const nameMatched = inventoryQuery.drugName
-          ? item.drugName?.includes(inventoryQuery.drugName)
-          : true;
-        return codeMatched && nameMatched;
-      });
+      }));
+    inventoryPage.total = res.total || 0;
   } finally {
     loadingInventory.value = false;
   }
 };
 
-const filteredDrugList = computed(() => {
-  if (inventoryQuery.showWarningOnly) {
-    return drugList.value.filter((d) => d.stock <= d.warningThreshold);
-  }
-  return drugList.value;
-});
+const handleInventoryPageSizeChange = () => {
+  inventoryPage.page = 1;
+  fetchDrugs();
+};
 
 const resetDrugForm = () => {
   Object.assign(drugForm, {
@@ -759,6 +770,12 @@ onMounted(() => {
 
 .pharmacy-tabs {
   margin-top: 10px;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 .filter-box {
   background-color: #fafafa;

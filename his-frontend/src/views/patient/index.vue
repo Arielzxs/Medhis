@@ -123,10 +123,7 @@
       <el-form :model="regForm" label-width="90px">
         <el-form-item label="挂号科室">
           <el-select v-model="regForm.department" style="width: 100%">
-            <el-option label="内科" value="内科" />
-            <el-option label="外科" value="外科" />
-            <el-option label="儿科" value="儿科" />
-            <el-option label="急诊科" value="急诊科" />
+            <el-option v-for="item in departments" :key="item" :label="item" :value="item" />
           </el-select>
         </el-form-item>
         <el-form-item label="排班医生ID">
@@ -161,11 +158,13 @@
 import { ref, reactive, onMounted } from "vue";
 import request from "../../utils/request";
 import { ElMessage } from "element-plus";
+import { fetchDepartmentOptions } from "../../utils/departments";
 
 const loading = ref(false);
 const submitLoading = ref(false);
 const tableData = ref([]);
 const total = ref(0);
+const departments = ref([]);
 
 const queryParams = reactive({ keyword: "", page: 1, size: 10 });
 
@@ -177,7 +176,7 @@ const registerVisible = ref(false);
 const regForm = reactive({
   patientId: null,
   doctorId: 1,
-  department: "内科",
+  department: "",
   scheduleDate: "",
   fee: 50.0,
 });
@@ -251,7 +250,11 @@ const submitRegister = async () => {
   fetchData();
 };
 
-onMounted(() => {
+onMounted(async () => {
+  departments.value = await fetchDepartmentOptions();
+  if (!regForm.department) {
+    regForm.department = departments.value[0] || "";
+  }
   fetchData();
 });
 </script>

@@ -90,6 +90,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pagination-box">
+        <el-pagination
+          v-model:current-page="pageState.page"
+          v-model:page-size="pageState.size"
+          :page-sizes="[10, 20, 50]"
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="pageState.total"
+          @current-change="fetchSchedules"
+          @size-change="handlePageSizeChange"
+        />
+      </div>
     </el-card>
 
     <el-dialog
@@ -159,14 +172,20 @@
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import request from "../../utils/request";
+import { fetchDepartmentOptions } from "../../utils/departments";
 
-const departments = ["心血管内科", "儿科", "消化内科", "普外科"];
+const departments = ref([]);
 const loading = ref(false);
 const saving = ref(false);
 const dialogVisible = ref(false);
 const formRef = ref();
 const doctorOptions = ref([]);
 const tableData = ref([]);
+const pageState = reactive({
+  page: 1,
+  size: 10,
+  total: 0,
+});
 
 const queryParams = reactive({
   department: "",
@@ -206,11 +225,12 @@ const fetchSchedules = async () => {
         department: queryParams.department,
         doctorName: queryParams.doctorName,
         date: queryParams.date,
-        page: 1,
-        size: 100,
+        page: pageState.page,
+        size: pageState.size,
       },
     });
     tableData.value = res.records || [];
+    pageState.total = res.total || 0;
   } finally {
     loading.value = false;
   }
@@ -242,11 +262,17 @@ const shiftTag = (shift) => {
 };
 
 const handleSearch = async () => {
+  pageState.page = 1;
   await Promise.all([fetchDoctors(), fetchSchedules()]);
 };
 
+const handlePageSizeChange = () => {
+  pageState.page = 1;
+  fetchSchedules();
+};
+
 const resetQuery = () => {
-  queryParams.department = "";
+  queryParams.department = departments.value[0] || "";
   queryParams.doctorName = "";
   queryParams.date = "";
   handleSearch();
@@ -316,7 +342,11 @@ const handleDelete = async (id) => {
   fetchSchedules();
 };
 
-onMounted(() => {
+onMounted(async () => {
+  departments.value = await fetchDepartmentOptions();
+  if (!queryParams.department) {
+    queryParams.department = departments.value[0] || "";
+  }
   handleSearch();
 });
 </script>
@@ -357,5 +387,11 @@ onMounted(() => {
 
 .filter-box {
   margin-bottom: 20px;
+}
+
+.pagination-box {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
 }
 </style>

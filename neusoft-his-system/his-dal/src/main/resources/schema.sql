@@ -16,10 +16,30 @@ CREATE TABLE IF NOT EXISTS patient (
     birthday DATE,
     phone VARCHAR(32),
     id_card VARCHAR(32),
+    balance DECIMAL(12,2) DEFAULT 0.00,
     current_status VARCHAR(32),
     created_at DATETIME,
     updated_at DATETIME
 );
+
+CREATE TABLE IF NOT EXISTS department (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(64) NOT NULL UNIQUE,
+    code VARCHAR(64),
+    location VARCHAR(128),
+    description VARCHAR(255),
+    sort_no INT,
+    enabled INT,
+    created_at DATETIME,
+    updated_at DATETIME
+);
+
+INSERT IGNORE INTO department (id, name, code, location, description, sort_no, enabled, created_at)
+VALUES
+    (910000000000000001, '心血管内科', 'CARDIOLOGY', '门诊二楼', '心血管疾病门诊诊疗科室', 10, 1, NOW()),
+    (910000000000000002, '儿科', 'PEDIATRICS', '门诊一楼', '儿童常见病与专科门诊', 20, 1, NOW()),
+    (910000000000000003, '消化内科', 'GASTROENTEROLOGY', '门诊二楼', '消化系统疾病门诊诊疗科室', 30, 1, NOW()),
+    (910000000000000004, '普外科', 'GENERAL_SURGERY', '门诊三楼', '普通外科门诊诊疗科室', 40, 1, NOW());
 
 CREATE TABLE IF NOT EXISTS outpatient_registration (
     id BIGINT PRIMARY KEY,
@@ -54,6 +74,19 @@ CREATE TABLE IF NOT EXISTS doctor_schedule (
     level VARCHAR(32),
     registration_limit INT,
     status INT,
+    created_at DATETIME,
+    updated_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS doctor_leave_application (
+    id BIGINT PRIMARY KEY,
+    doctor_id BIGINT NOT NULL,
+    user_id BIGINT,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    reason VARCHAR(255),
+    status VARCHAR(32),
+    previous_status VARCHAR(32),
     created_at DATETIME,
     updated_at DATETIME
 );

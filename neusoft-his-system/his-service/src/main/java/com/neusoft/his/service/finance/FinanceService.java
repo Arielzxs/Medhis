@@ -3,6 +3,7 @@ package com.neusoft.his.service.finance;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
+import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.BillingRecord;
@@ -11,6 +12,7 @@ import com.neusoft.his.dal.entity.Prescription;
 import com.neusoft.his.dal.mapper.BillingRecordMapper;
 import com.neusoft.his.dal.mapper.FinancialTransactionMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * 财务管理业务服务。
+ *
+ * <p>负责处方划价、账单收费、退费、报销、支出登记和财务报表查询。
+ * 所有资金方向明确的动作都会写入财务流水和审计日志。</p>
+ */
 @Service
 public class FinanceService {
     private final BillingRecordMapper billingMapper;
@@ -141,19 +149,28 @@ public class FinanceService {
         return "日结完成: 收入=" + income + " 支出=" + out + " 结余=" + income.subtract(out);
     }
 
-    public PageResponse<FinancialTransaction> report(long page, long size) {
-        Page<FinancialTransaction> pageParam = new Page<>(page, size);
+    public PageResponse<FinancialTransaction> report(String date, long page, long size) {
+        Page<FinancialTransaction> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<FinancialTransaction> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(date)) {
+            query.likeRight("created_at", date);
+        }
         query.orderByDesc("created_at");
         transactionMapper.selectPage(pageParam, query);
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
     }
 
-    public PageResponse<BillingRecord> bills(String status, long page, long size) {
-        Page<BillingRecord> pageParam = new Page<>(page, size);
+    public PageResponse<BillingRecord> bills(String status, String keyword, String patientKeyword, long page, long size) {
+        Page<BillingRecord> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<BillingRecord> query = new QueryWrapper<>();
-        if (status != null && !status.isBlank()) {
+        if (StringUtils.isNotBlank(status)) {
             query.eq("status", status);
+        }
+        if (StringUtils.isNotBlank(keyword)) {
+            query.and(wrapper -> wrapper.like("id", keyword));
+        }
+        if (StringUtils.isNotBlank(patientKeyword)) {
+            query.and(wrapper -> wrapper.like("patient_id", patientKeyword));
         }
         query.orderByDesc("created_at");
         billingMapper.selectPage(pageParam, query);

@@ -12,7 +12,14 @@ spring:
     init:
       mode: always # 每次启动时执行 schema.sql
       schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.neusoft.his.dal.entity
   configuration:
     map-underscore-to-camel-case: true
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn

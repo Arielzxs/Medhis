@@ -1,13 +1,82 @@
+# OS / filesystem
 .DS_Store
+._*
+.AppleDouble
+.LSOverride
+Icon?
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+Thumbs.db
+Desktop.ini
 
-# Frontend
+# Editors / IDEs
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Node / Vite frontend
+node_modules/
 his-frontend/node_modules/
+dist/
 his-frontend/dist/
+.vite/
+coverage/
 
-# Java / Maven
-neusoft-his-system/.m2repo/
+# Java / Maven backend
+target/
+target/
 **/target/
+# Maven 编译产物
+target/
+**/target/
+**/target/**
 
-# IDE
-**/.idea/
-**/.vscode/
+# Java 编译文件
+*.class
+
+# IDEA 配置
+.idea/
+*.iml
+
+neusoft-his-system/.m2repo/
+*.class
+*.jar
+*.war
+*.ear
+
+# Test / build output
+test-results/
+surefire-reports/
+failsafe-reports/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+
+# Office temporary files
+~$*.docx
+~$*.xlsx
+~$*.pptx

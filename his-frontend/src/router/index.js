@@ -38,6 +38,11 @@ const routes = [
             meta: { title: "门诊挂号", roles: ["ADMIN", "REGISTRAR"] },
           },
           {
+            path: "manage",
+            component: () => import("../views/patient/manage.vue"),
+            meta: { title: "患者信息管理", roles: ["ADMIN"] },
+          },
+          {
             path: "tracking",
             component: () => import("../views/patient/tracking.vue"),
             meta: {
@@ -46,6 +51,15 @@ const routes = [
             },
           },
         ],
+      },
+      {
+        path: "department",
+        component: () => import("../views/department/index.vue"),
+        meta: {
+          title: "科室管理",
+          roles: ["ADMIN"],
+          icon: "OfficeBuilding",
+        },
       },
       {
         path: "doctor",
@@ -60,6 +74,16 @@ const routes = [
         },
         children: [
           {
+            path: "profile",
+            component: () => import("../views/doctor/profile.vue"),
+            meta: { title: "医生档案", roles: ["ADMIN", "DOCTOR"] },
+          },
+          {
+            path: "leave",
+            component: () => import("../views/doctor/leave.vue"),
+            meta: { title: "请假管理", roles: ["ADMIN", "DOCTOR"] },
+          },
+          {
             path: "schedule",
             component: () => import("../views/doctor/schedule.vue"),
             meta: { title: "人员排班", roles: ["ADMIN", "DOCTOR"] },
@@ -67,7 +91,7 @@ const routes = [
           {
             path: "consultation",
             component: () => import("../views/doctor/index.vue"),
-            meta: { title: "接诊问诊", roles: ["ADMIN", "DOCTOR"] },
+            meta: { title: "接诊问诊", roles: ["DOCTOR"], excludeRoles: ["ADMIN"] },
           },
         ],
       },
@@ -134,6 +158,8 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore();
   const hasAuth = (roles) => {
+    const excluded = to.meta?.excludeRoles;
+    if (excluded?.some((role) => userStore.roles.includes(role))) return false;
     if (!roles) return true;
     if (userStore.roles.includes("ADMIN")) return true;
     return roles.some((role) => userStore.roles.includes(role));

@@ -4,14 +4,55 @@ import router from "./router";
 import { createPinia } from "pinia";
 import ElementPlus from "element-plus";
 import "element-plus/dist/index.css";
-import * as ElementPlusIconsVue from "@element-plus/icons-vue";
+import {
+  ArrowDown,
+  Bottom,
+  Box,
+  DataAnalysis,
+  Expand,
+  FirstAidKit,
+  Fold,
+  Money,
+  Odometer,
+  Platform,
+  Plus,
+  Refresh,
+  Search,
+  Setting,
+  SuccessFilled,
+  Ticket,
+  Top,
+  User,
+  UserFilled,
+} from "@element-plus/icons-vue";
 
 const app = createApp(App);
 
-// 注册所有 Element Plus 图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component);
-}
+const globalIcons = {
+  ArrowDown,
+  Bottom,
+  Box,
+  DataAnalysis,
+  Expand,
+  FirstAidKit,
+  Fold,
+  Money,
+  Odometer,
+  Platform,
+  Plus,
+  Refresh,
+  Search,
+  Setting,
+  SuccessFilled,
+  Ticket,
+  Top,
+  User,
+  UserFilled,
+};
+
+Object.entries(globalIcons).forEach(([name, component]) => {
+  app.component(name, component);
+});
 
 app.use(createPinia());
 app.use(router);
