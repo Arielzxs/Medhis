@@ -6,8 +6,12 @@ import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
+import com.neusoft.his.dal.entity.DoctorLeaveApplication;
+import com.neusoft.his.dal.entity.DoctorSchedule;
 import com.neusoft.his.dal.entity.OutpatientRegistration;
 import com.neusoft.his.dal.entity.Patient;
+import com.neusoft.his.dal.mapper.DoctorLeaveApplicationMapper;
+import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import com.neusoft.his.dal.mapper.PatientMapper;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
@@ -22,7 +26,9 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.UUID;
@@ -38,16 +44,24 @@ import java.math.BigDecimal;
  */
 @Service
 public class PatientService {
+    private static final List<String> ACTIVE_DOCTOR_STATUSES = List.of("在岗", "在诊");
+    private static final List<String> BLOCKING_LEAVE_STATUSES = List.of("待生效", "生效中");
+
     private final PatientMapper patientMapper;
     private final OutpatientRegistrationMapper registrationMapper;
     private final DoctorProfileMapper doctorMapper;
+    private final DoctorScheduleMapper scheduleMapper;
+    private final DoctorLeaveApplicationMapper leaveMapper;
     private final AuditService auditService;
 
     public PatientService(PatientMapper patientMapper, OutpatientRegistrationMapper registrationMapper,
-                          DoctorProfileMapper doctorMapper, AuditService auditService) {
+                          DoctorProfileMapper doctorMapper, DoctorScheduleMapper scheduleMapper,
+                          DoctorLeaveApplicationMapper leaveMapper, AuditService auditService) {
         this.patientMapper = patientMapper;
         this.registrationMapper = registrationMapper;
         this.doctorMapper = doctorMapper;
+        this.scheduleMapper = scheduleMapper;
+        this.leaveMapper = leaveMapper;
         this.auditService = auditService;
     }
 
@@ -105,17 +119,34 @@ public class PatientService {
 
     @Transactional(rollbackFor = Exception.class)
     public Patient update(Long id, Patient patient) {
-        Patient old = patientMapper.selectByIdCard(patient.getIdCard());
+        Patient old = patientMapper.selectById(id);
         if (old == null) throw new BizException("患者不存在");
 
         patient.setId(id);
+        if (StringUtils.isBlank(patient.getPatientNo())) {
+            patient.setPatientNo(old.getPatientNo());
+        }
+        if (StringUtils.isBlank(patient.getCurrentStatus())) {
+            patient.setCurrentStatus(old.getCurrentStatus());
+        }
         if (patient.getBalance() == null) {
             patient.setBalance(old.getBalance());
         }
+        patient.setCreatedAt(old.getCreatedAt());
         patient.setUpdatedAt(LocalDateTime.now());
         patientMapper.updateById(patient);
         auditService.log("PATIENT_UPDATE", "更新患者: " + id);
         return patient;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id) {
+        Patient patient = patientMapper.selectById(id);
+        if (patient == null) {
+            throw new BizException("患者不存在");
+        }
+        patientMapper.deleteById(id);
+        auditService.log("PATIENT_DELETE", "删除患者: " + id + ", 姓名: " + patient.getName());
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -167,8 +198,50 @@ public class PatientService {
 
     @Transactional(rollbackFor = Exception.class)
     public OutpatientRegistration register(PatientRegistrationRequest req) {
+        if (req == null || req.patientId() == null) {
+            throw new BizException("请选择患者");
+        }
+        if (req.doctorId() == null) {
+            throw new BizException("请选择看诊医生");
+        }
+        if (StringUtils.isBlank(req.scheduleDate())) {
+            throw new BizException("请选择看诊日期");
+        }
         Patient patient = patientMapper.selectById(req.patientId());
         if (patient == null) throw new BizException("患者不存在2");
+        DoctorProfile doctor = doctorMapper.selectById(req.doctorId());
+        if (doctor == null) {
+            throw new BizException("医生不存在");
+        }
+        if (!ACTIVE_DOCTOR_STATUSES.contains(doctor.getAttendanceStatus())) {
+            throw new BizException("医生当前处于" + StringUtils.defaultIfBlank(doctor.getAttendanceStatus(), "不可出诊") + "状态，不能挂号");
+        }
+        QueryWrapper<DoctorSchedule> scheduleQuery = new QueryWrapper<DoctorSchedule>()
+                .eq("doctor_id", req.doctorId())
+                .eq("schedule_date", req.scheduleDate())
+                .eq("status", 1);
+        if (StringUtils.isNotBlank(req.shift())) {
+            scheduleQuery.eq("shift", req.shift());
+        }
+        List<DoctorSchedule> schedules = scheduleMapper.selectList(scheduleQuery);
+        if (schedules == null || schedules.isEmpty()) {
+            throw new BizException("该医生当前没有可挂号排班");
+        }
+        if (hasLeaveConflict(req.doctorId(), req.scheduleDate(), req.shift())) {
+            throw new BizException("该医生在所选时间段已有请假记录，不能挂号");
+        }
+        long usedCount = registrationMapper.selectCount(new QueryWrapper<OutpatientRegistration>()
+                .eq("doctor_id", req.doctorId())
+                .eq("schedule_date", req.scheduleDate())
+                .and(wrapper -> wrapper.isNull("status").or().notIn("status", "已退号", "已取消", "CANCELLED")));
+        int limit = schedules.stream()
+                .map(DoctorSchedule::getRegistrationLimit)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+        if (limit <= 0 || usedCount >= limit) {
+            throw new BizException("该医生号源已满，不能挂号");
+        }
 
         OutpatientRegistration reg = new OutpatientRegistration();
         reg.setPatientId(req.patientId());
@@ -194,6 +267,34 @@ public class PatientService {
         return reg;
     }
 
+    private boolean hasLeaveConflict(Long doctorId, String scheduleDate, String shift) {
+        LocalDate date = LocalDate.parse(scheduleDate);
+        LocalDateTime slotStart = date.atTime(shiftStart(shift));
+        LocalDateTime slotEnd = date.atTime(shiftEnd(shift));
+        return leaveMapper.selectCount(new QueryWrapper<DoctorLeaveApplication>()
+                .eq("doctor_id", doctorId)
+                .in("status", BLOCKING_LEAVE_STATUSES)
+                .lt("start_time", slotEnd)
+                .gt("end_time", slotStart)) > 0;
+    }
+
+    private LocalTime shiftStart(String shift) {
+        if ("下午".equals(shift)) {
+            return LocalTime.of(13, 0);
+        }
+        return LocalTime.of(8, 0);
+    }
+
+    private LocalTime shiftEnd(String shift) {
+        if ("上午".equals(shift)) {
+            return LocalTime.of(12, 0);
+        }
+        if ("下午".equals(shift)) {
+            return LocalTime.of(17, 0);
+        }
+        return LocalTime.of(17, 0);
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public void cancelRegistration(Long regId) {
         OutpatientRegistration reg = registrationMapper.selectById(regId);
@@ -207,17 +308,31 @@ public class PatientService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void payRegistration(Long regId) {
+    public Patient payRegistration(Long regId) {
         OutpatientRegistration reg = registrationMapper.selectById(regId);
         if (reg == null) throw new BizException("挂号单不存在");
         if ("Y".equals(reg.getPaid())) throw new BizException("该挂号单已缴费");
+        Patient patient = patientMapper.selectById(reg.getPatientId());
+        if (patient == null) {
+            throw new BizException("患者不存在");
+        }
+        BigDecimal fee = reg.getFee() == null ? BigDecimal.ZERO : reg.getFee();
+        BigDecimal currentBalance = patient.getBalance() == null ? BigDecimal.ZERO : patient.getBalance();
+        if (currentBalance.compareTo(fee) < 0) {
+            throw new BizException("就诊卡余额不足，请先充值");
+        }
 
         reg.setPaid("Y");
         // 缴费完成后，业务状态流转至“待诊”
         reg.setStatus("待诊");
         reg.setUpdatedAt(LocalDateTime.now());
         registrationMapper.updateById(reg);
-        auditService.log("REG_PAY", "挂号缴费: " + regId);
+        patient.setBalance(currentBalance.subtract(fee));
+        patient.setCurrentStatus("待诊");
+        patient.setUpdatedAt(LocalDateTime.now());
+        patientMapper.updateById(patient);
+        auditService.log("REG_PAY", "挂号缴费: " + regId + ", 扣费: " + fee);
+        return patient;
     }
 
     public String printRegistration(Long regId) {
@@ -233,6 +348,18 @@ public class PatientService {
     }
 
     public PageResponse<Map<String, Object>> registrations(Long id, String status, long page, long size) {
+        return registrations(id, status, null, page, size);
+    }
+
+    public PageResponse<Map<String, Object>> doctorRegistrations(Long userId, String status, long page, long size) {
+        DoctorProfile doctor = doctorMapper.selectOne(new QueryWrapper<DoctorProfile>().eq("user_id", userId));
+        if (doctor == null) {
+            throw new BizException("医生档案不存在");
+        }
+        return registrations(null, status, doctor.getId(), page, size);
+    }
+
+    public PageResponse<Map<String, Object>> registrations(Long id, String status, Long doctorId, long page, long size) {
         Page<OutpatientRegistration> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<OutpatientRegistration> query = new QueryWrapper<>();
         if (id != null) {
@@ -240,6 +367,9 @@ public class PatientService {
         }
         if (StringUtils.isNotBlank(status)) {
             query.eq("status", status);
+        }
+        if (doctorId != null) {
+            query.eq("doctor_id", doctorId);
         }
         query.orderByDesc("created_at");
         registrationMapper.selectPage(pageParam, query);

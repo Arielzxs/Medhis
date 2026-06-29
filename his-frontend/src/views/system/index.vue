@@ -679,6 +679,7 @@
 import { ref, reactive, computed, nextTick, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import request from "../../utils/request";
+import { fetchDepartmentOptions } from "../../utils/departments";
 
 const activeTab = ref("accounts");
 const loading = ref(false);
@@ -902,8 +903,7 @@ const doctorProfileRules = {
   attendanceStatus: [{ required: true, message: "请选择在岗状态", trigger: "change" }],
 };
 
-// 科室列表从档案数据动态提取，保留兜底值
-const departments = ref(["待分配", "心血管内科", "儿科", "消化内科", "普外科"]);
+const departments = ref(["待分配"]);
 // 所有职工账号映射 { userId: { id, username, name, role } }
 const accountMap = ref({});
 // 可关联的医生候选账号（角色为 DOCTOR 的职工）
@@ -989,6 +989,10 @@ const fetchDoctorProfiles = async () => {
   } finally {
     loadingDoctorProfiles.value = false;
   }
+};
+
+const fetchDepartments = async () => {
+  departments.value = await fetchDepartmentOptions({ includePending: true });
 };
 
 const resetDoctorProfileForm = () => {
@@ -1309,6 +1313,7 @@ const clearLogs = async () => {
 };
 
 onMounted(() => {
+  fetchDepartments();
   fetchAccounts();
   fetchRoleMatrix();
   fetchLogs();

@@ -3,14 +3,19 @@ package com.neusoft.his.service.doctor;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.neusoft.his.common.audit.AuditService;
 import com.neusoft.his.common.exception.BizException;
+import com.neusoft.his.dal.entity.DoctorLeaveApplication;
 import com.neusoft.his.dal.entity.DoctorProfile;
+import com.neusoft.his.dal.mapper.DoctorLeaveApplicationMapper;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
 import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
+import com.neusoft.his.service.dto.DoctorLeaveApplyRequest;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,7 +41,9 @@ class DoctorWorkstationServiceProfileTest {
         List<DoctorProfile> doctors = service.listDoctors("心血管内科");
 
         assertThat(doctors).containsExactly(doctor);
-        verify(doctorMapper).selectList(argThat(wrapper -> wrapper.getExpression().getNormal().toString().contains("attendance_status")));
+        ArgumentCaptor<QueryWrapper<DoctorProfile>> captor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(doctorMapper).selectList(captor.capture());
+        assertThat(captor.getValue().getSqlSegment()).contains("attendance_status");
     }
 
     @Test
@@ -53,7 +60,7 @@ class DoctorWorkstationServiceProfileTest {
     }
 
     @Test
-    void updateOwnDoctorProfile_should_only_update_specialty() {
+    void updateOwnDoctorProfile_should_update_own_profile_fields() {
         DoctorProfileMapper doctorMapper = mock(DoctorProfileMapper.class);
         DoctorProfile existing = new DoctorProfile();
         existing.setId(10L);
@@ -68,33 +75,78 @@ class DoctorWorkstationServiceProfileTest {
 
         DoctorProfile payload = new DoctorProfile();
         payload.setDepartment("儿科");
-        payload.setTitle("院长");
+        payload.setTitle("主治医师");
         payload.setAttendanceStatus("停诊");
         payload.setSpecialty("高血压、冠心病");
 
         DoctorProfile updated = service.updateOwnDoctorProfile(100L, payload);
 
-        assertThat(updated.getDepartment()).isEqualTo("心血管内科");
-        assertThat(updated.getTitle()).isEqualTo("主任医师");
+        assertThat(updated.getDepartment()).isEqualTo("儿科");
+        assertThat(updated.getTitle()).isEqualTo("主治医师");
         assertThat(updated.getAttendanceStatus()).isEqualTo("在岗");
         assertThat(updated.getSpecialty()).isEqualTo("高血压、冠心病");
-        verify(doctorMapper).updateById(argThat(profile ->
+        verify(doctorMapper).updateById(argThat((DoctorProfile profile) ->
                 profile.getId().equals(10L)
-                        && profile.getDepartment().equals("心血管内科")
-                        && profile.getTitle().equals("主任医师")
+                        && profile.getDepartment().equals("儿科")
+                        && profile.getTitle().equals("主治医师")
                         && profile.getAttendanceStatus().equals("在岗")
                         && profile.getSpecialty().equals("高血压、冠心病")
         ));
     }
 
+    @Test
+    void submitLeave_should_create_active_leave_and_switch_own_attendance_status_to_rest() {
+        DoctorProfileMapper doctorMapper = mock(DoctorProfileMapper.class);
+        DoctorLeaveApplicationMapper leaveMapper = mock(DoctorLeaveApplicationMapper.class);
+        DoctorProfile existing = new DoctorProfile();
+        existing.setId(10L);
+        existing.setUserId(100L);
+        existing.setName("张医生");
+        existing.setDepartment("心血管内科");
+        existing.setTitle("主任医师");
+        existing.setAttendanceStatus("在诊");
+        existing.setSpecialty("普通门诊");
+        when(doctorMapper.selectOne(any(QueryWrapper.class))).thenReturn(existing);
+        when(doctorMapper.selectById(10L)).thenReturn(existing);
+        when(leaveMapper.selectCount(any(QueryWrapper.class))).thenReturn(0L, 1L);
+        when(leaveMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(activeLeave()));
+        DoctorWorkstationService service = serviceWith(doctorMapper, leaveMapper);
+        LocalDateTime now = LocalDateTime.now();
+
+        DoctorLeaveApplication leave = service.submitLeave(100L, new DoctorLeaveApplyRequest(
+                now.minusMinutes(1), now.plusHours(2), "家中有事"
+        ));
+
+        assertThat(leave.getStatus()).isEqualTo("生效中");
+        verify(doctorMapper).updateById(argThat((DoctorProfile profile) ->
+                profile.getId().equals(10L)
+                        && profile.getAttendanceStatus().equals("休息")
+        ));
+    }
+
     private DoctorWorkstationService serviceWith(DoctorProfileMapper doctorMapper) {
+        return serviceWith(doctorMapper, mock(DoctorLeaveApplicationMapper.class));
+    }
+
+    private DoctorWorkstationService serviceWith(DoctorProfileMapper doctorMapper, DoctorLeaveApplicationMapper leaveMapper) {
         return new DoctorWorkstationService(
                 doctorMapper,
+                leaveMapper,
                 mock(DoctorScheduleMapper.class),
                 mock(MedicalRecordMapper.class),
                 mock(OutpatientRegistrationMapper.class),
                 mock(PrescriptionMapper.class),
                 mock(AuditService.class)
         );
+    }
+
+    private DoctorLeaveApplication activeLeave() {
+        DoctorLeaveApplication leave = new DoctorLeaveApplication();
+        leave.setId(1L);
+        leave.setDoctorId(10L);
+        leave.setStatus("生效中");
+        leave.setStartTime(LocalDateTime.now().minusMinutes(1));
+        leave.setEndTime(LocalDateTime.now().plusHours(2));
+        return leave;
     }
 }

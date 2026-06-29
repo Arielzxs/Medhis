@@ -172,9 +172,9 @@
 import { ref, reactive, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import request from "../../utils/request";
+import { fetchDepartmentOptions } from "../../utils/departments";
 
-const departments = ["心血管内科", "儿科", "消化内科", "普外科"];
-const DEFAULT_OUTPATIENT_DEPARTMENT = "心血管内科";
+const departments = ref([]);
 const loading = ref(false);
 const saving = ref(false);
 const dialogVisible = ref(false);
@@ -188,7 +188,7 @@ const pageState = reactive({
 });
 
 const queryParams = reactive({
-  department: DEFAULT_OUTPATIENT_DEPARTMENT,
+  department: "",
   doctorName: "",
   date: "",
 });
@@ -272,7 +272,7 @@ const handlePageSizeChange = () => {
 };
 
 const resetQuery = () => {
-  queryParams.department = DEFAULT_OUTPATIENT_DEPARTMENT;
+  queryParams.department = departments.value[0] || "";
   queryParams.doctorName = "";
   queryParams.date = "";
   handleSearch();
@@ -342,7 +342,11 @@ const handleDelete = async (id) => {
   fetchSchedules();
 };
 
-onMounted(() => {
+onMounted(async () => {
+  departments.value = await fetchDepartmentOptions();
+  if (!queryParams.department) {
+    queryParams.department = departments.value[0] || "";
+  }
   handleSearch();
 });
 </script>

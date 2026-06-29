@@ -6,12 +6,13 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/his_system?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
     username: root
-    password: 123456
+    password: Ariel830
     driver-class-name: com.mysql.cj.jdbc.Driver
   sql:
     init:
       mode: always # 每次启动时执行 schema.sql
       schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   type-aliases-package: com.neusoft.his.dal.entity

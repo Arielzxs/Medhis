@@ -10,6 +10,7 @@ public record DoctorScheduleView(
         String name,
         String title,
         String attendanceStatus,
+        String availabilityStatus,
         String level,
         Integer limit,
         Integer remain,

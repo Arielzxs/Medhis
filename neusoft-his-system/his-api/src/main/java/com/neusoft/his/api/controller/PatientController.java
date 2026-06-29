@@ -4,6 +4,8 @@ import com.neusoft.his.common.api.ApiResponse;
 import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.security.RequireRoles;
 import com.neusoft.his.common.security.RoleCode;
+import com.neusoft.his.common.security.SecurityUser;
+import com.neusoft.his.common.security.SecurityUserHolder;
 import com.neusoft.his.dal.entity.OutpatientRegistration;
 import com.neusoft.his.dal.entity.Patient;
 import com.neusoft.his.service.dto.PatientRegistrationRequest;
@@ -38,6 +40,14 @@ public class PatientController {
     public ApiResponse<Patient> update(@Parameter(description = "患者 ID") @PathVariable Long id,
                                        @RequestBody Patient patient) {
         return ApiResponse.ok("更新成功", patientService.update(id, patient));
+    }
+
+    @DeleteMapping("/{id}")
+    @RequireRoles({RoleCode.ADMIN})
+    @Operation(summary = "删除患者档案", description = "管理员删除指定患者基础档案。")
+    public ApiResponse<Void> delete(@Parameter(description = "患者 ID") @PathVariable Long id) {
+        patientService.delete(id);
+        return ApiResponse.ok("删除成功", null);
     }
 
     @PostMapping("/{id}/recharge")
@@ -92,9 +102,19 @@ public class PatientController {
     @Operation(summary = "分页查询挂号记录", description = "用于就诊状态追踪、医生候诊列表和财务收费场景。")
     public ApiResponse<PageResponse<java.util.Map<String, Object>>> registrations(@Parameter(description = "挂号单 ID") @RequestParam(required = false) Long id,
                                                                                   @Parameter(description = "挂号状态") @RequestParam(required = false) String status,
+                                                                                  @Parameter(description = "医生档案 ID") @RequestParam(required = false) Long doctorId,
                                                                                   @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
                                                                                   @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
-        return ApiResponse.ok(patientService.registrations(id, status, page, size));
+        return ApiResponse.ok(patientService.registrations(id, status, doctorId, page, size));
+    }
+
+    @GetMapping("/registrations/me")
+    @RequireRoles({RoleCode.DOCTOR})
+    @Operation(summary = "查询我的候诊队列", description = "医生仅查询分配给自己的挂号患者。")
+    public ApiResponse<PageResponse<java.util.Map<String, Object>>> myRegistrations(@Parameter(description = "挂号状态") @RequestParam(required = false) String status,
+                                                                                    @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
+                                                                                    @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
+        return ApiResponse.ok(patientService.doctorRegistrations(currentUserId(), status, page, size));
     }
 
     @PostMapping("/registrations/{id}/cancel")
@@ -108,9 +128,8 @@ public class PatientController {
     @PostMapping("/registrations/{id}/pay")
     @RequireRoles({RoleCode.REGISTRAR, RoleCode.FINANCE, RoleCode.ADMIN})
     @Operation(summary = "挂号缴费", description = "将指定挂号单标记为已支付。")
-    public ApiResponse<Void> pay(@Parameter(description = "挂号单 ID") @PathVariable Long id) {
-        patientService.payRegistration(id);
-        return ApiResponse.ok("挂号缴费成功", null);
+    public ApiResponse<Patient> pay(@Parameter(description = "挂号单 ID") @PathVariable Long id) {
+        return ApiResponse.ok("挂号缴费成功", patientService.payRegistration(id));
     }
 
     @GetMapping("/registrations/{id}/print")
@@ -150,5 +169,13 @@ public class PatientController {
         int genderDigit = Integer.parseInt(card.substring(16, 17));
         info.put("gender", genderDigit % 2 == 1 ? "男" : "女");
         return ApiResponse.ok(info);
+    }
+
+    private Long currentUserId() {
+        SecurityUser user = SecurityUserHolder.get();
+        if (user == null || user.userId() == null) {
+            throw new com.neusoft.his.common.exception.BizException("请先登录");
+        }
+        return user.userId();
     }
 }

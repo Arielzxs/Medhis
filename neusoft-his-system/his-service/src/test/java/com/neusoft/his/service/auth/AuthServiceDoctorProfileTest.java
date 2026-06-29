@@ -48,7 +48,7 @@ class AuthServiceDoctorProfileTest {
 
         assertThat(userId).isEqualTo(100L);
         verify(doctorProfileMapper).insert(any(DoctorProfile.class));
-        verify(doctorProfileMapper).insert(org.mockito.ArgumentMatchers.argThat(profile ->
+        verify(doctorProfileMapper).insert(org.mockito.ArgumentMatchers.argThat((DoctorProfile profile) ->
                 profile.getUserId().equals(100L)
                         && profile.getName().equals("张医生")
                         && profile.getDepartment().equals("待分配")
@@ -83,7 +83,7 @@ class AuthServiceDoctorProfileTest {
         Long userId = service.createStaff(new AuthRequest("d002", "123456", "李医生", RoleCode.DOCTOR));
 
         assertThat(userId).isEqualTo(200L);
-        verify(doctorProfileMapper).insert(org.mockito.ArgumentMatchers.argThat(profile ->
+        verify(doctorProfileMapper).insert(org.mockito.ArgumentMatchers.argThat((DoctorProfile profile) ->
                 profile.getUserId().equals(200L)
                         && profile.getName().equals("李医生")
                         && profile.getAttendanceStatus().equals("待完善")

@@ -3,6 +3,7 @@ package com.neusoft.his.service.doctor;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.audit.AuditService;
+import com.neusoft.his.dal.mapper.DoctorLeaveApplicationMapper;
 import com.neusoft.his.dal.view.DoctorScheduleView;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
 import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
@@ -34,12 +35,12 @@ class DoctorWorkstationServicePaginationTest {
         PrescriptionMapper prescriptionMapper = mock(PrescriptionMapper.class);
         AuditService auditService = mock(AuditService.class);
         DoctorWorkstationService service = new DoctorWorkstationService(
-                doctorMapper, scheduleMapper, recordMapper, registrationMapper, prescriptionMapper, auditService
+                doctorMapper, mock(DoctorLeaveApplicationMapper.class), scheduleMapper, recordMapper, registrationMapper, prescriptionMapper, auditService
         );
 
         DoctorScheduleView view = new DoctorScheduleView(
                 1L, 11L, "2026-06-28", "上午", "心血管内科", "张医生", "张医生",
-                "主任医师", "上午", "专家号", 20, 20, 1
+                "主任医师", "在诊", "正常", "专家号", 20, 20, 1
         );
         when(scheduleMapper.selectSchedulePage(any(Page.class), eq("心血管内科"), eq("张"), eq("2026-06-28"), eq(true)))
                 .thenReturn(List.of(view));
@@ -60,7 +61,7 @@ class DoctorWorkstationServicePaginationTest {
     }
 
     @Test
-    void scheduleQuery_should_default_blank_department_to_outpatient_department() {
+    void scheduleQuery_should_not_force_department_when_department_is_blank() {
         DoctorScheduleMapper scheduleMapper = mock(DoctorScheduleMapper.class);
         DoctorProfileMapper doctorMapper = mock(DoctorProfileMapper.class);
         MedicalRecordMapper recordMapper = mock(MedicalRecordMapper.class);
@@ -68,18 +69,17 @@ class DoctorWorkstationServicePaginationTest {
         PrescriptionMapper prescriptionMapper = mock(PrescriptionMapper.class);
         AuditService auditService = mock(AuditService.class);
         DoctorWorkstationService service = new DoctorWorkstationService(
-                doctorMapper, scheduleMapper, recordMapper, registrationMapper, prescriptionMapper, auditService
+                doctorMapper, mock(DoctorLeaveApplicationMapper.class), scheduleMapper, recordMapper, registrationMapper, prescriptionMapper, auditService
         );
 
-        String defaultDepartment = "\u5fc3\u8840\u7ba1\u5185\u79d1";
-        when(scheduleMapper.selectSchedulePage(any(Page.class), eq(defaultDepartment), isNull(), isNull(), eq(false)))
+        when(scheduleMapper.selectSchedulePage(any(Page.class), isNull(), isNull(), isNull(), eq(false)))
                 .thenReturn(List.of());
-        when(scheduleMapper.countSchedulePage(defaultDepartment, null, null, false)).thenReturn(0L);
+        when(scheduleMapper.countSchedulePage(null, null, null, false)).thenReturn(0L);
 
         PageResponse<DoctorScheduleView> response = service.scheduleQuery("", null, null, false, 1, 10);
 
         assertThat(response.records()).isEmpty();
-        verify(scheduleMapper).selectSchedulePage(any(Page.class), eq(defaultDepartment), isNull(), isNull(), eq(false));
-        verify(scheduleMapper).countSchedulePage(defaultDepartment, null, null, false);
+        verify(scheduleMapper).selectSchedulePage(any(Page.class), isNull(), isNull(), isNull(), eq(false));
+        verify(scheduleMapper).countSchedulePage(null, null, null, false);
     }
 }

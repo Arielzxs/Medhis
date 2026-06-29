@@ -147,10 +147,7 @@
                 placeholder="选择科室"
                 style="width: 140px"
               >
-                <el-option label="心血管内科" value="心血管内科" />
-                <el-option label="儿科" value="儿科" />
-                <el-option label="消化内科" value="消化内科" />
-                <el-option label="普外科" value="普外科" />
+                <el-option v-for="item in departments" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
             <el-form-item label="看诊医生">
@@ -184,18 +181,12 @@
             v-loading="scheduleLoading"
             border
             stripe
-            highlight-current-row
-            @current-change="handleSelectSchedule"
+            row-key="id"
+            @selection-change="handleSelectionChange"
             style="width: 100%"
             height="450"
           >
-            <el-table-column width="50" align="center">
-              <template #default="scope">
-                <el-radio :label="scope.row.id" v-model="selectedScheduleId"
-                  ><i></i
-                ></el-radio>
-              </template>
-            </el-table-column>
+            <el-table-column type="selection" width="48" align="center" :selectable="isScheduleSelectable" />
             <el-table-column
               prop="doctorName"
               label="医生姓名"
@@ -210,10 +201,28 @@
             />
             <el-table-column prop="department" label="科室" align="center" />
             <el-table-column
-              prop="shift"
-              label="班次"
+              prop="attendanceStatus"
+              label="医生状态"
               align="center"
-              width="80"
+              width="100"
+            >
+              <template #default="scope">
+                <el-tag :type="doctorStatusType(scope.row)" effect="light">
+                  {{ doctorStatusText(scope.row) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="scheduleDate"
+              label="就诊日期"
+              align="center"
+              width="120"
+            />
+            <el-table-column
+              prop="visitTime"
+              label="班次时间"
+              align="center"
+              width="170"
             />
             <el-table-column
               prop="fee"
@@ -255,20 +264,18 @@
 
           <div class="bottom-action">
             <div class="summary">
-              已选看诊医生：<span class="highlight">{{
-                selectedSchedule?.doctorName || "--"
-              }}</span>
+              已选医生：<span class="highlight">{{ selectedSchedules.length }} 位</span>
               需支付金额：<span class="highlight fee-text"
-                >¥ {{ selectedSchedule?.fee || "0.00" }}</span
+                >¥ {{ totalFee.toFixed(2) }}</span
               >
             </div>
             <el-button
               type="success"
               size="large"
-              :disabled="scheduleLoading || !selectedSchedule || !patientLocked"
+              :disabled="scheduleLoading || !selectedSchedules.length || !patientLocked"
               @click="submitRegistration"
             >
-              确认挂号并缴费
+              确认挂号并扣费
             </el-button>
           </div>
         </el-card>
@@ -349,9 +356,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from "vue";
+import { computed, ref, reactive, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import request from "../../utils/request";
+import { fetchDepartmentOptions } from "../../utils/departments";
 
 // ===== 患者信息逻辑 =====
 const searchIdCard = ref("");
@@ -540,11 +548,10 @@ const submitBalanceRefund = async () => {
 };
 
 // ===== 排班挂号逻辑 =====
-const DEFAULT_OUTPATIENT_DEPARTMENT = "心血管内科";
-const scheduleQuery = reactive({ department: DEFAULT_OUTPATIENT_DEPARTMENT, doctorName: "", date: "" });
+const departments = ref([]);
+const scheduleQuery = reactive({ department: "", doctorName: "", date: "" });
 const scheduleList = ref([]);
-const selectedScheduleId = ref(null);
-const selectedSchedule = ref(null);
+const selectedSchedules = ref([]);
 const scheduleLoading = ref(false);
 let scheduleRequestId = 0;
 const schedulePage = reactive({
@@ -564,6 +571,24 @@ const formatDate = (value) => {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return value;
 };
+
+const shiftTimeRange = (shift) => {
+  if (shift === "上午") return "08:00-12:00";
+  if (shift === "下午") return "13:00-17:00";
+  return "08:00-17:00";
+};
+
+const doctorStatusText = (row) => {
+  return row.availabilityStatus || (["在岗", "在诊"].includes(row.attendanceStatus) ? "正常" : "休息");
+};
+
+const doctorStatusType = (row) => {
+  return doctorStatusText(row) === "正常" ? "success" : "info";
+};
+
+const totalFee = computed(() =>
+  selectedSchedules.value.reduce((sum, item) => sum + Number(item.fee || 0), 0),
+);
 
 const fetchSchedules = async (resetPage = false) => {
   if (resetPage === true) {
@@ -591,12 +616,16 @@ const fetchSchedules = async (resetPage = false) => {
       title: schedule.title || "普通医师",
       department: schedule.department,
       shift: schedule.shift || schedule.attendanceStatus || "全天",
+      visitTime: `${schedule.scheduleDate || formatDate(scheduleQuery.date) || "--"} ${schedule.shift || "全天"} ${shiftTimeRange(schedule.shift)}`,
+      attendanceStatus: schedule.attendanceStatus,
+      availabilityStatus: schedule.availabilityStatus,
       fee: doctorFee(schedule.title),
-      remain: schedule.status === 0 ? 0 : (schedule.remain ?? schedule.limit ?? 0),
+      remain: schedule.status === 0 || !["在岗", "在诊"].includes(schedule.attendanceStatus)
+        ? 0
+        : (schedule.remain ?? schedule.limit ?? 0),
     }));
     schedulePage.total = res.total || 0;
-    selectedScheduleId.value = null;
-    selectedSchedule.value = null;
+    selectedSchedules.value = [];
   } finally {
     if (requestId === scheduleRequestId) {
       scheduleLoading.value = false;
@@ -610,33 +639,50 @@ const handleSchedulePageSizeChange = (size) => {
   fetchSchedules();
 };
 
-const handleSelectSchedule = (row) => {
-  if (row && row.remain > 0) {
-    selectedScheduleId.value = row.id;
-    selectedSchedule.value = row;
-  } else if (row && row.remain <= 0) {
-    ElMessage.warning("该医生号源已满");
-  }
+const isScheduleSelectable = (row) => {
+  return row.remain > 0 && ["在岗", "在诊"].includes(row.attendanceStatus);
+};
+
+const handleSelectionChange = (rows) => {
+  selectedSchedules.value = rows;
 };
 
 const submitRegistration = async () => {
   if (!patientLocked.value) return ElMessage.warning("请先确认当前患者");
-  const reg = await request.post("/api/patients/registrations", {
-    patientId: patientForm.id,
-    doctorId: selectedSchedule.value.doctorId,
-    department: selectedSchedule.value.department,
-    scheduleDate:
-      selectedSchedule.value.scheduleDate ||
-      formatDate(scheduleQuery.date) ||
-      new Date().toISOString().slice(0, 10),
-    fee: selectedSchedule.value.fee,
-  });
-  await request.post(`/api/patients/registrations/${reg.id}/pay`);
-  ElMessage.success(`挂号成功！挂号单号：REG${reg.id}`);
+  if (!selectedSchedules.value.length) return ElMessage.warning("请至少选择一个医生号源");
+  if (Number(patientForm.balance || 0) < totalFee.value) {
+    return ElMessage.warning("就诊卡余额不足，请先充值");
+  }
+  const regNos = [];
+  let latestPatient = null;
+  for (const schedule of selectedSchedules.value) {
+    const reg = await request.post("/api/patients/registrations", {
+      patientId: patientForm.id,
+      doctorId: schedule.doctorId,
+      department: schedule.department,
+      scheduleDate:
+        schedule.scheduleDate ||
+        formatDate(scheduleQuery.date) ||
+        new Date().toISOString().slice(0, 10),
+      shift: schedule.shift,
+      fee: schedule.fee,
+    });
+    latestPatient = await request.post(`/api/patients/registrations/${reg.id}/pay`);
+    regNos.push(`REG${reg.id}`);
+  }
+  if (latestPatient) {
+    applyPatient(latestPatient);
+    patientLocked.value = true;
+  }
+  ElMessage.success(`挂号成功！挂号单号：${regNos.join("、")}`);
   fetchSchedules();
 };
 
-onMounted(() => {
+onMounted(async () => {
+  departments.value = await fetchDepartmentOptions();
+  if (!scheduleQuery.department) {
+    scheduleQuery.department = departments.value[0] || "";
+  }
   fetchSchedules();
 });
 </script>

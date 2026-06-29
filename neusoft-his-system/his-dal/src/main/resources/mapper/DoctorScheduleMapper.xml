@@ -17,6 +17,7 @@
             </if>
             <if test="availableOnly">
                 AND ds.status = 1
+                AND dp.attendance_status IN ('在岗', '在诊')
                 AND ds.schedule_date &gt;= DATE_FORMAT(CURDATE(), '%Y-%m-%d')
             </if>
         </where>
@@ -32,7 +33,11 @@
             dp.name AS doctorName,
             dp.name AS name,
             dp.title,
-            CASE WHEN ds.status = 0 THEN '停诊' ELSE ds.shift END AS attendanceStatus,
+            dp.attendance_status AS attendanceStatus,
+            CASE
+                WHEN ds.status = 0 OR dp.attendance_status NOT IN ('在岗', '在诊') THEN '休息'
+                ELSE '正常'
+            END AS availabilityStatus,
             ds.level,
             COALESCE(ds.registration_limit, 0) AS `limit`,
             COALESCE(ds.registration_limit, 0) AS remain,

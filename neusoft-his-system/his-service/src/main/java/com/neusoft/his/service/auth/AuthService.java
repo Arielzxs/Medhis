@@ -206,6 +206,11 @@ public class AuthService {
         if (!RoleCode.DOCTOR.equals(role)) {
             return;
         }
+        QueryWrapper<DoctorProfile> existingQuery = new QueryWrapper<>();
+        existingQuery.eq("user_id", user.getId());
+        if (doctorProfileMapper.selectCount(existingQuery) > 0) {
+            return;
+        }
         DoctorProfile profile = new DoctorProfile();
         profile.setUserId(user.getId());
         profile.setName(user.getName());
@@ -267,6 +272,9 @@ public class AuthService {
             userRole.setUserId(userId);
             userRole.setRoleCode(role);
             sysUserRoleMapper.insert(userRole);
+        }
+        if (roles.contains(RoleCode.DOCTOR)) {
+            createPendingDoctorProfileIfNeeded(RoleCode.DOCTOR, user);
         }
 
         auditService.log("ASSIGN_ROLES", "为用户 " + user.getUsername() + " 分配角色: " + roles.toString());

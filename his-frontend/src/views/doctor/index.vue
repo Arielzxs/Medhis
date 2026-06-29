@@ -29,7 +29,7 @@
                 <div class="p-info">
                   <div class="p-name">{{ p.name }}</div>
                   <div class="p-meta">
-                    {{ p.gender || "男" }} | {{ p.age || "65岁" }}
+                    {{ p.department || "--" }} | {{ p.scheduleDate || "--" }}
                   </div>
                 </div>
                 <el-button
@@ -158,9 +158,7 @@
 import { ref, reactive, onMounted } from "vue";
 import request from "../../utils/request";
 import { ElMessage } from "element-plus";
-import { useUserStore } from "../../store/user";
 
-const userStore = useUserStore();
 const queueTab = ref("waiting");
 const activeTab = ref("record");
 const activePatient = ref(null);
@@ -176,10 +174,10 @@ const recordForm = reactive({
 const fetchQueue = async () => {
   try {
     const [waiting, waitingLegacy] = await Promise.all([
-      request.get("/api/patients/registrations", {
+      request.get("/api/patients/registrations/me", {
         params: { status: "待诊", page: 1, size: 100 },
       }),
-      request.get("/api/patients/registrations", {
+      request.get("/api/patients/registrations/me", {
         params: { status: "待诊中", page: 1, size: 100 },
       }),
     ]);
@@ -189,10 +187,13 @@ const fetchQueue = async () => {
     ].map((item) => ({
       id: item.id,
       patientId: item.patientId,
+      doctorId: item.doctorId,
       name: item.patientName || `患者#${item.patientId}`,
       gender: "",
       age: "",
       regNo: item.regNo,
+      department: item.department,
+      scheduleDate: item.scheduleDate,
     }));
   } catch (e) {
     console.error(e);
@@ -214,7 +215,7 @@ const submitRecord = async () => {
 
   const submitData = {
     patientId: activePatient.value.patientId,
-    doctorId: userStore.userId || 1,
+    doctorId: activePatient.value.doctorId,
     diagnosis: recordForm.diagnosis,
     treatmentPlan: `主诉: ${recordForm.chiefComplaint}\n现病史: ${recordForm.presentIllness}\n既往史: ${recordForm.pastHistory}`,
   };
