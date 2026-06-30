@@ -2,6 +2,8 @@ package com.neusoft.his.service.doctor;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neusoft.his.common.api.PageResponse;
 import com.neusoft.his.common.api.PageSupport;
 import com.neusoft.his.common.audit.AuditService;
@@ -9,14 +11,18 @@ import com.neusoft.his.common.exception.BizException;
 import com.neusoft.his.dal.entity.DoctorLeaveApplication;
 import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.dal.entity.DoctorSchedule;
+import com.neusoft.his.dal.entity.DrugCatalog;
 import com.neusoft.his.dal.entity.MedicalRecord;
 import com.neusoft.his.dal.entity.OutpatientRegistration;
+import com.neusoft.his.dal.entity.Patient;
 import com.neusoft.his.dal.entity.Prescription;
 import com.neusoft.his.dal.mapper.DoctorLeaveApplicationMapper;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
 import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
+import com.neusoft.his.dal.mapper.DrugCatalogMapper;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
+import com.neusoft.his.dal.mapper.PatientMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
 import com.neusoft.his.dal.view.DoctorScheduleView;
 import com.neusoft.his.service.dto.DoctorLeaveApplyRequest;
@@ -24,6 +30,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -57,19 +64,25 @@ public class DoctorWorkstationService {
     private final DoctorScheduleMapper scheduleMapper;
     private final MedicalRecordMapper recordMapper;
     private final OutpatientRegistrationMapper registrationMapper;
+    private final PatientMapper patientMapper;
     private final PrescriptionMapper prescriptionMapper;
+    private final DrugCatalogMapper drugMapper;
     private final AuditService auditService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DoctorWorkstationService(DoctorProfileMapper doctorMapper, DoctorLeaveApplicationMapper leaveMapper,
                                     DoctorScheduleMapper scheduleMapper,
                                     MedicalRecordMapper recordMapper, OutpatientRegistrationMapper registrationMapper,
-                                    PrescriptionMapper prescriptionMapper, AuditService auditService) {
+                                    PatientMapper patientMapper, PrescriptionMapper prescriptionMapper, DrugCatalogMapper drugMapper,
+                                    AuditService auditService) {
         this.doctorMapper = doctorMapper;
         this.leaveMapper = leaveMapper;
         this.scheduleMapper = scheduleMapper;
         this.recordMapper = recordMapper;
         this.registrationMapper = registrationMapper;
+        this.patientMapper = patientMapper;
         this.prescriptionMapper = prescriptionMapper;
+        this.drugMapper = drugMapper;
         this.auditService = auditService;
     }
 
@@ -637,6 +650,35 @@ public class DoctorWorkstationService {
     }
 
     @Transactional(rollbackFor = Exception.class)
+    public MedicalRecord saveRecordForDoctor(Long userId, MedicalRecord record) {
+        DoctorProfile doctor = doctorMapper.selectOne(new QueryWrapper<DoctorProfile>().eq("user_id", userId));
+        if (doctor == null) {
+            throw new BizException("医生档案不存在");
+        }
+        if (record.getPatientId() == null) {
+            throw new BizException("请选择接诊患者");
+        }
+        if (record.getDoctorId() != null && !Objects.equals(record.getDoctorId(), doctor.getId())) {
+            throw new BizException("只能诊断挂自己号的患者");
+        }
+        OutpatientRegistration registration = registrationMapper.selectOne(new QueryWrapper<OutpatientRegistration>()
+                .eq("patient_id", record.getPatientId())
+                .eq("doctor_id", doctor.getId())
+                .in("status", List.of("待诊", "待诊中", "就诊中"))
+                .orderByDesc("created_at")
+                .last("limit 1"));
+        if (registration == null) {
+            throw new BizException("只能诊断挂自己号的待诊患者");
+        }
+        record.setDoctorId(doctor.getId());
+        MedicalRecord saved = saveRecord(record);
+        registration.setStatus("已完成");
+        registration.setUpdatedAt(LocalDateTime.now());
+        registrationMapper.updateById(registration);
+        return saved;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public Prescription prescribe(Prescription prescription) {
         if (prescription.getPatientId() == null || prescription.getDoctorId() == null) {
             throw new BizException("处方患者和医生不能为空");
@@ -648,6 +690,101 @@ public class DoctorWorkstationService {
         prescriptionMapper.insert(prescription);
         auditService.log("PRESCRIBE", "处方开具=" + prescription.getId());
         return prescription;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Prescription prescribeForDoctor(Long userId, Prescription prescription) {
+        DoctorProfile doctor = doctorMapper.selectOne(new QueryWrapper<DoctorProfile>().eq("user_id", userId));
+        if (doctor == null) {
+            throw new BizException("医生档案不存在");
+        }
+        if (prescription.getPatientId() == null) {
+            throw new BizException("请选择接诊患者");
+        }
+        if (prescription.getDoctorId() != null && !Objects.equals(prescription.getDoctorId(), doctor.getId())) {
+            throw new BizException("只能为挂自己号的患者开具处方");
+        }
+        long registrationCount = registrationMapper.selectCount(new QueryWrapper<OutpatientRegistration>()
+                .eq("patient_id", prescription.getPatientId())
+                .eq("doctor_id", doctor.getId())
+                .in("status", List.of("待诊", "待诊中", "就诊中")));
+        if (registrationCount <= 0) {
+            throw new BizException("只能为挂自己号的待诊患者开具处方");
+        }
+        prescription.setDoctorId(doctor.getId());
+        validateDrugItemsAndAmount(prescription);
+        return prescribe(prescription);
+    }
+
+    private void validateDrugItemsAndAmount(Prescription prescription) {
+        if (StringUtils.isBlank(prescription.getDrugItems())) {
+            throw new BizException("请至少选择一种药品");
+        }
+        List<Map<String, Object>> items;
+        try {
+            items = objectMapper.readValue(prescription.getDrugItems(), new TypeReference<>() {});
+        } catch (Exception e) {
+            throw new BizException("处方药品明细格式不正确");
+        }
+        if (items == null || items.isEmpty()) {
+            throw new BizException("请至少选择一种药品");
+        }
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (Map<String, Object> item : items) {
+            Long drugId = toLong(item.get("drugId"));
+            Integer quantity = toInteger(item.get("quantity"));
+            if (drugId == null || quantity == null || quantity <= 0) {
+                throw new BizException("药品和数量不能为空");
+            }
+            DrugCatalog drug = drugMapper.selectById(drugId);
+            if (drug == null) {
+                throw new BizException("药品不存在");
+            }
+            int stock = drug.getStock() == null ? 0 : drug.getStock();
+            if (quantity > stock) {
+                throw new BizException(drug.getName() + "库存不足，当前库存" + stock);
+            }
+            BigDecimal price = drug.getPrice() == null ? BigDecimal.ZERO : drug.getPrice();
+            totalAmount = totalAmount.add(price.multiply(BigDecimal.valueOf(quantity)));
+            item.put("drugName", drug.getName());
+            item.put("unit", drug.getUnit());
+            item.put("price", price);
+        }
+        try {
+            prescription.setDrugItems(objectMapper.writeValueAsString(items));
+        } catch (Exception e) {
+            throw new BizException("处方药品明细保存失败");
+        }
+        prescription.setType("DRUG");
+        prescription.setTotalAmount(totalAmount);
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value == null || StringUtils.isBlank(String.valueOf(value))) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Integer toInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null || StringUtils.isBlank(String.valueOf(value))) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public List<MedicalRecord> history(Long patientId) {
@@ -662,12 +799,99 @@ public class DoctorWorkstationService {
         return prescription;
     }
 
+    public PageResponse<DrugCatalog> searchDrugsForPrescription(String codeKeyword, String nameKeyword, long page, long size) {
+        Page<DrugCatalog> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
+        QueryWrapper<DrugCatalog> query = new QueryWrapper<>();
+        if (StringUtils.isNotBlank(codeKeyword)) {
+            query.like("code", codeKeyword.trim());
+        }
+        if (StringUtils.isNotBlank(nameKeyword)) {
+            query.like("name", nameKeyword.trim());
+        }
+        query.orderByDesc("stock").orderByAsc("code");
+        drugMapper.selectPage(pageParam, query);
+        return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
+    }
+
     public PageResponse<Prescription> listPrescriptions(long page, long size) {
         Page<Prescription> pageParam = new Page<>(PageSupport.page(page), PageSupport.size(size));
         QueryWrapper<Prescription> query = new QueryWrapper<>();
         query.orderByDesc("created_at");
         prescriptionMapper.selectPage(pageParam, query);
         return new PageResponse<>(pageParam.getCurrent(), pageParam.getSize(), pageParam.getTotal(), pageParam.getRecords());
+    }
+
+    public PageResponse<Map<String, Object>> listPrescriptionViews(long page, long size) {
+        PageResponse<Prescription> prescriptionPage = listPrescriptions(page, size);
+        List<Prescription> records = prescriptionPage.records();
+        if (records == null || records.isEmpty()) {
+            return new PageResponse<>(prescriptionPage.page(), prescriptionPage.size(), prescriptionPage.total(), List.of());
+        }
+
+        Set<Long> patientIds = records.stream()
+                .map(Prescription::getPatientId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Long> doctorIds = records.stream()
+                .map(Prescription::getDoctorId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Long, Patient> patientMap = patientIds.isEmpty()
+                ? Map.of()
+                : patientMapper.selectBatchIds(patientIds).stream()
+                .collect(Collectors.toMap(Patient::getId, Function.identity(), (a, b) -> a));
+        Map<Long, DoctorProfile> doctorMap = doctorIds.isEmpty()
+                ? Map.of()
+                : doctorMapper.selectBatchIds(doctorIds).stream()
+                .collect(Collectors.toMap(DoctorProfile::getId, Function.identity(), (a, b) -> a));
+        Map<String, OutpatientRegistration> registrationMap = loadPrescriptionRegistrationMap(patientIds, doctorIds);
+
+        List<Map<String, Object>> views = records.stream().map(prescription -> {
+            Patient patient = patientMap.get(prescription.getPatientId());
+            DoctorProfile doctor = doctorMap.get(prescription.getDoctorId());
+            OutpatientRegistration registration = registrationMap.get(registrationKey(prescription.getPatientId(), prescription.getDoctorId()));
+            Map<String, Object> item = new java.util.LinkedHashMap<>();
+            item.put("id", prescription.getId());
+            item.put("patientId", prescription.getPatientId());
+            item.put("patientName", patient == null ? "" : patient.getName());
+            item.put("doctorId", prescription.getDoctorId());
+            item.put("doctorName", doctor == null ? "" : doctor.getName());
+            item.put("department", registration != null && StringUtils.isNotBlank(registration.getDepartment())
+                    ? registration.getDepartment()
+                    : doctor == null ? "" : doctor.getDepartment());
+            item.put("type", prescription.getType());
+            item.put("drugItems", prescription.getDrugItems());
+            item.put("checkItems", prescription.getCheckItems());
+            item.put("totalAmount", prescription.getTotalAmount());
+            item.put("paid", prescription.getPaid());
+            item.put("auditStatus", prescription.getAuditStatus());
+            item.put("dispenseStatus", prescription.getDispenseStatus());
+            item.put("createdAt", prescription.getCreatedAt());
+            item.put("updatedAt", prescription.getUpdatedAt());
+            return item;
+        }).toList();
+
+        return new PageResponse<>(prescriptionPage.page(), prescriptionPage.size(), prescriptionPage.total(), views);
+    }
+
+    private Map<String, OutpatientRegistration> loadPrescriptionRegistrationMap(Set<Long> patientIds, Set<Long> doctorIds) {
+        if (patientIds.isEmpty() || doctorIds.isEmpty()) {
+            return Map.of();
+        }
+        List<OutpatientRegistration> registrations = registrationMapper.selectList(new QueryWrapper<OutpatientRegistration>()
+                .in("patient_id", patientIds)
+                .in("doctor_id", doctorIds)
+                .orderByDesc("created_at"));
+        return registrations.stream().collect(Collectors.toMap(
+                registration -> registrationKey(registration.getPatientId(), registration.getDoctorId()),
+                Function.identity(),
+                (first, ignored) -> first
+        ));
+    }
+
+    private String registrationKey(Long patientId, Long doctorId) {
+        return String.valueOf(patientId) + ":" + String.valueOf(doctorId);
     }
 
     private void validateDoctorProfile(DoctorProfile doctor) {

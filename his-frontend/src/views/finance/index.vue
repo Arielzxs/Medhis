@@ -402,7 +402,9 @@ const billTypeText = (type) => {
 const mapBill = (bill) => ({
   id: bill.id,
   billNo: `BL${bill.id}`,
-  patientName: `患者#${bill.patientId}`,
+  patientName: bill.patientName
+    ? `${bill.patientName}${bill.patientNo ? `（${bill.patientNo}）` : ""}`
+    : "--",
   billType: billTypeText(bill.billingType),
   department: "--",
   doctorName: "--",
@@ -521,7 +523,7 @@ const submitRefund = async () => {
 const dailyDate = ref(new Date());
 const dailyStats = reactive({ totalIncome: 0, totalRefund: 0, netIncome: 0 });
 
-const fetchDailyStats = async () => {
+const fetchDailyStats = async (showMessage = true) => {
   const date = dailyDate.value instanceof Date
     ? dailyDate.value.toISOString().slice(0, 10)
     : "";
@@ -536,7 +538,9 @@ const fetchDailyStats = async () => {
     .filter((item) => item.bizType === "REFUND")
     .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   dailyStats.netIncome = dailyStats.totalIncome - dailyStats.totalRefund;
-  ElMessage.success("报表生成成功");
+  if (showMessage) {
+    ElMessage.success("报表生成成功");
+  }
 };
 
 const executeDailyReconcile = () => {
@@ -560,7 +564,7 @@ const executeDailyReconcile = () => {
 onMounted(() => {
   fetchPendingBills();
   fetchPaidBills();
-  fetchDailyStats();
+  fetchDailyStats(false);
 });
 </script>
 

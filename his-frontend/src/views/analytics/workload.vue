@@ -21,6 +21,8 @@
               v-model="queryParams.department"
               placeholder="全部科室"
               clearable
+              filterable
+              class="department-select"
             >
               <el-option v-for="item in departments" :key="item" :label="item" :value="item" />
             </el-select>
@@ -38,13 +40,13 @@
       </el-row>
 
       <el-table
-        :data="tableData"
+        :data="pagedTableData"
         border
         stripe
         style="width: 100%; margin-top: 20px"
         :header-cell-style="{ background: '#f5f7fa' }"
       >
-        <el-table-column type="index" label="排名" width="80" align="center" />
+        <el-table-column prop="rank" label="排名" width="80" align="center" />
         <el-table-column prop="department" label="科室" align="center" />
         <el-table-column prop="doctorName" label="医生姓名" align="center" />
         <el-table-column prop="patientCount" label="接诊人次" align="center" />
@@ -54,12 +56,22 @@
           align="center"
         />
       </el-table>
+      <div class="table-pagination">
+        <el-pagination
+          v-model:current-page="pageState.page"
+          v-model:page-size="pageState.size"
+          :page-sizes="[10, 20, 50]"
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="tableData.length"
+        />
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from "vue";
+import { ref, reactive, computed, onMounted, nextTick } from "vue";
 import * as echarts from "echarts";
 import request from "../../utils/request";
 import { fetchDepartmentOptions } from "../../utils/departments";
@@ -68,6 +80,15 @@ const queryParams = reactive({ dateRange: null, department: "" });
 const barChartRef = ref(null);
 const tableData = ref([]);
 const departments = ref([]);
+const pageState = reactive({
+  page: 1,
+  size: 10,
+});
+
+const pagedTableData = computed(() => {
+  const start = (pageState.page - 1) * pageState.size;
+  return tableData.value.slice(start, start + pageState.size);
+});
 
 let myChart;
 const initChart = () => {
@@ -93,16 +114,35 @@ const updateChart = () => {
   });
 };
 
+const formatDate = (value) => {
+  if (!value) return undefined;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString().slice(0, 10);
+};
+
 const handleSearch = async () => {
-  const workload = await request.get("/api/analytics/doctor-workload");
-  tableData.value = Object.entries(workload || {})
-    .map(([doctorName, count]) => ({
-      department: queryParams.department || "--",
-      doctorName,
-      patientCount: count,
-      prescriptionCount: 0,
+  const [startDate, endDate] = queryParams.dateRange || [];
+  const rows = await request.get("/api/analytics/doctor-workload/ranking", {
+    params: {
+      department: queryParams.department || undefined,
+      startDate: formatDate(startDate),
+      endDate: formatDate(endDate),
+    },
+  });
+  tableData.value = (rows || [])
+    .map((item) => ({
+      department: item.department || "--",
+      doctorName: item.doctorName || "--",
+      patientCount: Number(item.patientCount || 0),
+      prescriptionCount: Number(item.prescriptionCount || 0),
     }))
-    .sort((a, b) => b.patientCount - a.patientCount);
+    .sort((a, b) => b.patientCount - a.patientCount)
+    .map((item, index) => ({
+      ...item,
+      rank: index + 1,
+    }));
+  pageState.page = 1;
   if (myChart) updateChart();
 };
 
@@ -143,11 +183,20 @@ onMounted(() => {
   border-radius: 4px;
   margin-bottom: 20px;
 }
+.department-select {
+  width: 240px;
+}
 .chart-container {
   height: 350px;
   background: #fff;
   padding: 10px;
   border: 1px solid #ebeef5;
   border-radius: 4px;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

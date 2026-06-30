@@ -332,6 +332,7 @@ public class AuthService {
                     item.put("id", String.valueOf(user.getId()));
                     item.put("username", user.getUsername());
                     item.put("name", user.getName());
+                    item.put("department", userDepartment(user.getId(), roles));
                     item.put("enabled", user.getEnabled());
                     item.put("roles", roles);
                     item.put("createdAt", user.getCreatedAt());
@@ -339,6 +340,29 @@ public class AuthService {
                 })
                 .filter(item -> item != null)
                 .toList();
+    }
+
+    private String userDepartment(Long userId, Set<String> roles) {
+        if (roles.contains(RoleCode.DOCTOR)) {
+            DoctorProfile profile = doctorProfileMapper.selectOne(new QueryWrapper<DoctorProfile>().eq("user_id", userId));
+            if (profile != null && profile.getDepartment() != null && !profile.getDepartment().isBlank()) {
+                return profile.getDepartment();
+            }
+            return "待分配";
+        }
+        if (roles.contains(RoleCode.ADMIN)) {
+            return "信息中心";
+        }
+        if (roles.contains(RoleCode.REGISTRAR)) {
+            return "挂号收费处";
+        }
+        if (roles.contains(RoleCode.PHARMACY_ADMIN)) {
+            return "药房";
+        }
+        if (roles.contains(RoleCode.FINANCE)) {
+            return "财务科";
+        }
+        return "未分配";
     }
 
     public Map<String, Set<String>> rolePermissions() {

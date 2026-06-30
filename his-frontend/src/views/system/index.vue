@@ -46,7 +46,7 @@
           </div>
 
           <el-table
-            :data="accountList"
+            :data="pagedAccountList"
             border
             stripe
             style="width: 100%"
@@ -124,6 +124,16 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="accountPage.page"
+              v-model:page-size="accountPage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="accountList.length"
+            />
+          </div>
         </el-tab-pane>
 
         <!-- ==================== 2. 医生档案管理 ==================== -->
@@ -687,6 +697,7 @@ const loading = ref(false);
 // ===== 账户管理数据 =====
 const accountQuery = reactive({ keyword: "", role: "" });
 const accountList = ref([]);
+const accountPage = reactive({ page: 1, size: 10 });
 const accountDialogVisible = ref(false);
 const roleDialogVisible = ref(false);
 const passwordDialogVisible = ref(false);
@@ -727,6 +738,11 @@ const passwordRules = {
   ],
 };
 
+const pagedAccountList = computed(() => {
+  const start = (accountPage.page - 1) * accountPage.size;
+  return accountList.value.slice(start, start + accountPage.size);
+});
+
 const roleLabel = (role) => {
   const map = {
     ADMIN: "管理员",
@@ -762,11 +778,12 @@ const fetchAccounts = async () => {
       id: user.id,
       empNo: user.username,
       name: user.name,
-      department: "--",
+      department: user.department || departmentByRoles(user.roles || []),
       role: (user.roles || []).map(roleLabel).join("、") || "未分配",
       roles: [...(user.roles || [])],
       status: user.enabled === "Y" ? 1 : 0,
     }));
+    accountPage.page = 1;
   } finally {
     loading.value = false;
   }
@@ -874,6 +891,15 @@ const getRoleType = (role) => {
     财务人员: "success",
   };
   return map[role] || "info";
+};
+
+const departmentByRoles = (roles) => {
+  if (roles.includes("DOCTOR")) return "待分配";
+  if (roles.includes("ADMIN")) return "信息中心";
+  if (roles.includes("REGISTRAR")) return "挂号收费处";
+  if (roles.includes("PHARMACY_ADMIN")) return "药房";
+  if (roles.includes("FINANCE")) return "财务科";
+  return "未分配";
 };
 
 // ===== 医生档案管理数据 =====
@@ -1042,6 +1068,7 @@ const submitDoctorProfile = async () => {
     doctorProfileDialogVisible.value = false;
     await fetchDoctorProfiles();
     await buildAccountMap();
+    await fetchAccounts();
   } finally {
     savingDoctorProfile.value = false;
   }

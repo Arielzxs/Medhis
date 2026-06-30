@@ -10,6 +10,7 @@ import com.neusoft.his.common.security.SecurityUserHolder;
 import com.neusoft.his.dal.entity.DoctorLeaveApplication;
 import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.dal.entity.DoctorSchedule;
+import com.neusoft.his.dal.entity.DrugCatalog;
 import com.neusoft.his.dal.entity.MedicalRecord;
 import com.neusoft.his.dal.entity.Prescription;
 import com.neusoft.his.dal.view.DoctorScheduleView;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/doctors")
@@ -189,7 +191,7 @@ public class DoctorController {
     @RequireRoles({RoleCode.DOCTOR})
     @Operation(summary = "保存病历", description = "医生保存诊断、处置计划并归档病历。")
     public ApiResponse<MedicalRecord> saveRecord(@RequestBody MedicalRecord record) {
-        return ApiResponse.ok("病历已归档", service.saveRecord(record));
+        return ApiResponse.ok("病历已归档", service.saveRecordForDoctor(currentUserId(), record));
     }
 
     @GetMapping("/records/history/{patientId}")
@@ -199,18 +201,28 @@ public class DoctorController {
         return ApiResponse.ok(service.history(patientId));
     }
 
+    @GetMapping("/drugs")
+    @RequireRoles({RoleCode.DOCTOR})
+    @Operation(summary = "医生开方药品搜索", description = "医生在接诊时按药品编码或名称搜索可开具药品和库存。")
+    public ApiResponse<PageResponse<DrugCatalog>> drugs(@Parameter(description = "药品编码关键字") @RequestParam(required = false) String codeKeyword,
+                                                        @Parameter(description = "药品名称关键字") @RequestParam(required = false) String nameKeyword,
+                                                        @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
+                                                        @Parameter(description = "每页条数，最大 50") @RequestParam(defaultValue = "10") long size) {
+        return ApiResponse.ok(service.searchDrugsForPrescription(codeKeyword, nameKeyword, page, size));
+    }
+
     @PostMapping("/prescriptions")
     @RequireRoles({RoleCode.DOCTOR})
     @Operation(summary = "开具处方", description = "医生为患者开具药品或检查处方。")
     public ApiResponse<Prescription> prescribe(@RequestBody Prescription prescription) {
-        return ApiResponse.ok("处方开具成功", service.prescribe(prescription));
+        return ApiResponse.ok("处方开具成功", service.prescribeForDoctor(currentUserId(), prescription));
     }
     @GetMapping("/prescriptions")
     @Operation(summary = "分页查询处方", description = "分页返回处方数据，避免一次返回全部处方导致文档页或前端卡顿。")
-    public ApiResponse<PageResponse<Prescription>> getAllPrescriptions(
+    public ApiResponse<PageResponse<Map<String, Object>>> getAllPrescriptions(
             @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
             @Parameter(description = "每页条数，最大 50") @RequestParam(defaultValue = "10") long size) {
-        return ApiResponse.ok(service.listPrescriptions(page, size));
+        return ApiResponse.ok(service.listPrescriptionViews(page, size));
     }
 
     private Long currentUserId() {

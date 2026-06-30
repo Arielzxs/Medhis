@@ -3,7 +3,7 @@
   <div class="dashboard-container">
     <!-- 顶部欢迎区与快捷操作 -->
     <el-row :gutter="20" class="top-panel">
-      <el-col :span="16">
+      <el-col :xs="24" :lg="14">
         <el-card shadow="never" class="welcome-card">
           <div class="welcome-box">
             <el-avatar :size="60" class="user-avatar">
@@ -20,7 +20,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :lg="10">
         <el-card shadow="never" class="quick-action-card">
           <div class="action-buttons">
             <el-button
@@ -142,7 +142,7 @@
               <span>系统日志与公告</span>
             </div>
           </template>
-          <el-timeline>
+          <el-timeline class="notice-timeline">
             <el-timeline-item
               v-for="(log, index) in logs"
               :key="index"
@@ -150,9 +150,25 @@
               :color="log.color"
               :timestamp="log.time"
             >
-              {{ log.content }}
+              <div class="log-content">
+                <div class="log-title">{{ log.title }}</div>
+                <div v-if="log.content" class="log-detail">{{ log.content }}</div>
+              </div>
             </el-timeline-item>
           </el-timeline>
+          <div v-if="hasRole('ADMIN')" class="log-pagination">
+            <el-pagination
+              v-model:current-page="logPage.page"
+              v-model:page-size="logPage.size"
+              :page-sizes="[5, 10, 20]"
+              small
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="logPage.total"
+              @current-change="fetchDashboardData"
+              @size-change="handleLogPageSizeChange"
+            />
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -180,10 +196,64 @@ const currentDate = computed(() => {
 
 const tasks = ref([]);
 const logs = ref([]);
+const logPage = reactive({ page: 1, size: 5, total: 0 });
+const systemNotices = [
+  {
+    title: "系统公告",
+    content: "请各岗位完成当日业务核对后再退出系统。",
+    time: "今日",
+    type: "success",
+    color: "#67c23a",
+  },
+  {
+    title: "运维提醒",
+    content: "库存预警、挂号收费和处方发药数据已接入实时看板。",
+    time: "实时",
+    type: "warning",
+    color: "#e6a23c",
+  },
+];
 
 const hasRole = (role) => userStore.roles.includes("ADMIN") || userStore.roles.includes(role);
 const hasAnyRole = (roles) =>
   userStore.roles.includes("ADMIN") || roles.some((role) => userStore.roles.includes(role));
+
+const operationLabels = {
+  LOGIN: "用户登录",
+  REGISTRATION: "门诊挂号",
+  PATIENT_UPDATE: "患者档案更新",
+  PATIENT_CREATE: "患者建档",
+  PATIENT_RECHARGE: "就诊卡充值",
+  PATIENT_BALANCE_REFUND: "就诊卡退费",
+  PRESCRIBE: "处方开立",
+  PRESCRIPTION_PAY: "处方缴费",
+  DISPENSE: "处方发药",
+  DRUG_SAVE: "药品档案保存",
+  DRUG_INBOUND: "药品入库",
+  STOCKTAKE: "库存盘点",
+  AUDIT_CLEAR: "日志清理",
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "刚刚";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ");
+  const pad = (num) => String(num).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const buildAuditLogItem = (log) => {
+  const operation = operationLabels[log.operation] || log.operation || "系统操作";
+  const username = log.username || "系统";
+  const detail = log.detail || "暂无详细说明";
+  return {
+    title: `${operation} · ${username}`,
+    content: detail,
+    time: formatDateTime(log.time),
+    type: "primary",
+    color: "#409eff",
+  };
+};
 
 const fetchDashboardData = async () => {
   loading.value = true;
@@ -197,7 +267,9 @@ const fetchDashboardData = async () => {
       hasRole("PHARMACY_ADMIN")
         ? request.get("/api/pharmacy/inventory/warnings")
         : Promise.resolve([]),
-      hasRole("ADMIN") ? request.get("/api/audit/logs", { params: { page: 1, size: 5 } }) : Promise.resolve({ records: [] }),
+      hasRole("ADMIN")
+        ? request.get("/api/audit/logs", { params: { page: logPage.page, size: logPage.size } })
+        : Promise.resolve({ records: [], total: 0 }),
     ]);
 
     stats.todayRegistrations = Number(dashboard.todayRegistrations || 0);
@@ -234,24 +306,42 @@ const fetchDashboardData = async () => {
           }]),
     ];
 
-    logs.value = hasRole("ADMIN")
-      ? (auditLogs.records || []).map((log) => ({
-          content: `${log.operation || "系统操作"}：${log.detail || ""}`,
-          time: log.time,
-          type: "primary",
-          color: "#409eff",
-        }))
-      : [{
-          content: "欢迎使用东软云医院 HIS 系统",
-          time: "实时",
-          type: "success",
-          color: "#67c23a",
-        }];
+    const latestAuditLogs = hasRole("ADMIN")
+      ? (auditLogs.records || []).map(buildAuditLogItem)
+      : [];
+    logPage.total = auditLogs.total || 0;
+    logs.value = [
+      ...(logPage.page === 1 ? systemNotices : []),
+      ...(latestAuditLogs.length
+        ? latestAuditLogs
+        : [{
+            title: "系统日志",
+            content: hasRole("ADMIN") ? "暂无最新审计日志。" : "当前账号暂无审计日志查看权限。",
+            time: "实时",
+            type: "info",
+            color: "#909399",
+          }]),
+    ];
   } catch (error) {
     console.error(error);
+    logs.value = [
+      ...systemNotices,
+      {
+        title: "系统日志",
+        content: "日志暂时无法加载，请稍后刷新看板。",
+        time: "实时",
+        type: "danger",
+        color: "#f56c6c",
+      },
+    ];
   } finally {
     loading.value = false;
   }
+};
+
+const handleLogPageSizeChange = () => {
+  logPage.page = 1;
+  fetchDashboardData();
 };
 
 onMounted(() => {
@@ -268,11 +358,13 @@ onMounted(() => {
 
 .top-panel {
   margin-bottom: 25px;
+  align-items: stretch;
 }
 
 .welcome-card,
 .quick-action-card {
-  height: 120px;
+  min-height: 120px;
+  height: 100%;
   border: none;
   border-radius: 4px;
 }
@@ -299,15 +391,23 @@ onMounted(() => {
 }
 
 .quick-action-card .action-buttons {
-  display: flex;
-  justify-content: space-around;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 14px;
   align-items: center;
+  align-content: center;
   height: 100%;
-  padding: 18px 0;
+  padding: 16px 0;
 }
 .action-buttons .el-button {
-  flex: 1;
-  margin: 0 10px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.quick-action-card :deep(.el-card__body) {
+  height: 100%;
 }
 
 .section-title {
@@ -415,5 +515,28 @@ onMounted(() => {
 .task-status {
   width: 80px;
   text-align: right;
+}
+.notice-timeline {
+  padding: 4px 0 0 2px;
+}
+.log-content {
+  line-height: 1.5;
+}
+.log-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  word-break: break-word;
+}
+.log-detail {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #606266;
+  word-break: break-word;
+}
+.log-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 </style>

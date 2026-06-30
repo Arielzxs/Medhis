@@ -8,8 +8,10 @@ import com.neusoft.his.dal.entity.DoctorProfile;
 import com.neusoft.his.dal.mapper.DoctorLeaveApplicationMapper;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
 import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
+import com.neusoft.his.dal.mapper.DrugCatalogMapper;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
+import com.neusoft.his.dal.mapper.PatientMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
 import com.neusoft.his.service.dto.DoctorLeaveApplyRequest;
 import org.junit.jupiter.api.Test;
@@ -135,7 +137,9 @@ class DoctorWorkstationServiceProfileTest {
                 mock(DoctorScheduleMapper.class),
                 mock(MedicalRecordMapper.class),
                 mock(OutpatientRegistrationMapper.class),
+                mock(PatientMapper.class),
                 mock(PrescriptionMapper.class),
+                mock(DrugCatalogMapper.class),
                 mock(AuditService.class)
         );
     }

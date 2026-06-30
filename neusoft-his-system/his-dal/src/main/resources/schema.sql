@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS drug_catalog (
     id BIGINT PRIMARY KEY,
     code VARCHAR(64) NOT NULL UNIQUE,
     name VARCHAR(128) NOT NULL,
+    category VARCHAR(64) DEFAULT '西药',
     unit VARCHAR(32),
     price DECIMAL(12,2),
     stock INT,

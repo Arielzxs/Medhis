@@ -33,6 +33,7 @@
                   style="width: 140px"
                 >
                   <el-option label="待审核" value="待审核" />
+                  <el-option label="待缴费" value="待缴费" />
                   <el-option label="待发药" value="待发药" />
                   <el-option label="已发药" value="已发药" />
                   <el-option label="已退回" value="已退回" />
@@ -48,7 +49,7 @@
           </div>
 
           <el-table
-            :data="prescriptionList"
+            :data="pagedPrescriptionList"
             border
             stripe
             style="width: 100%"
@@ -60,6 +61,7 @@
               label="序号"
               width="60"
               align="center"
+              :index="prescriptionIndex"
             />
             <el-table-column
               prop="prescriptionNo"
@@ -141,16 +143,26 @@
                   >审核</el-button
                 >
                 <el-button
-                  v-if="scope.row.status === '待发药'"
+                  v-if="['待缴费', '待发药'].includes(scope.row.status)"
                   type="success"
                   link
                   size="small"
                   @click="handleDispense(scope.row)"
-                  >发药</el-button
+                  >{{ scope.row.status === "待缴费" ? "缴费发药" : "发药" }}</el-button
                 >
               </template>
             </el-table-column>
           </el-table>
+          <div class="table-pagination">
+            <el-pagination
+              v-model:current-page="prescriptionPage.page"
+              v-model:page-size="prescriptionPage.size"
+              :page-sizes="[10, 20, 50]"
+              background
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="prescriptionList.length"
+            />
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="药品字典与库存" name="inventory">
@@ -171,6 +183,21 @@
                   clearable
                   style="width: 160px"
                 />
+              </el-form-item>
+              <el-form-item label="药品分类">
+                <el-select
+                  v-model="inventoryQuery.category"
+                  placeholder="全部分类"
+                  clearable
+                  style="width: 140px"
+                >
+                  <el-option
+                    v-for="item in drugCategories"
+                    :key="item"
+                    :label="item"
+                    :value="item"
+                  />
+                </el-select>
               </el-form-item>
               <el-form-item label="库存预警">
                 <el-switch
@@ -358,11 +385,97 @@
       </div>
       <template #footer>
         <span class="dialog-footer">
-          <el-button type="danger" plain @click="submitReview(false)"
-            >审核驳回</el-button
+          <template v-if="currentPrescription?.status === '待审核'">
+            <el-button type="danger" plain @click="submitReview(false)"
+              >审核驳回</el-button
+            >
+            <el-button type="success" @click="submitReview(true)"
+              >审核通过</el-button
+            >
+          </template>
+          <el-button v-else @click="reviewDialogVisible = false">关 闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="paymentDialogVisible"
+      title="处方缴费确认"
+      width="520px"
+      destroy-on-close
+    >
+      <div v-if="paymentInfo">
+        <el-descriptions border :column="1" class="mb-4">
+          <el-descriptions-item label="患者姓名">{{
+            paymentInfo.patientName
+          }}</el-descriptions-item>
+          <el-descriptions-item label="处方金额">
+            <span class="amount-text">¥ {{ formatMoney(paymentInfo.amount) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="当前余额">
+            ¥ {{ formatMoney(paymentInfo.balance) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="扣费后余额">
+            ¥ {{ formatMoney(paymentInfo.remainingBalance) }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-alert
+          title="请确认患者同意使用就诊卡余额支付该处方费用。"
+          type="warning"
+          show-icon
+          :closable="false"
+        />
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="paymentDialogVisible = false">取 消</el-button>
+          <el-button
+            type="primary"
+            :loading="payingPrescription"
+            @click="confirmPaymentAndDispense"
+            >同意付费并发药</el-button
           >
-          <el-button type="success" @click="submitReview(true)"
-            >审核通过</el-button
+        </span>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="rechargeDialogVisible"
+      title="余额不足，请充值"
+      width="520px"
+      destroy-on-close
+    >
+      <div v-if="paymentInfo">
+        <el-alert
+          :title="`当前余额 ¥ ${formatMoney(paymentInfo.balance)}，处方金额 ¥ ${formatMoney(paymentInfo.amount)}`"
+          type="error"
+          show-icon
+          :closable="false"
+          class="mb-4"
+        />
+        <el-form :model="rechargeForm" label-width="90px">
+          <el-form-item label="患者姓名">
+            <span>{{ paymentInfo.patientName }}</span>
+          </el-form-item>
+          <el-form-item label="充值金额">
+            <el-input-number
+              v-model="rechargeForm.amount"
+              :min="0.01"
+              :precision="2"
+              :step="10"
+              style="width: 180px"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="rechargeDialogVisible = false">取 消</el-button>
+          <el-button
+            type="primary"
+            :loading="rechargingPatient"
+            @click="submitRecharge"
+            >确认充值</el-button
           >
         </span>
       </template>
@@ -421,6 +534,11 @@
         <el-form-item label="药品名称" prop="name">
           <el-input v-model.trim="drugForm.name" placeholder="请输入药品名称" />
         </el-form-item>
+        <el-form-item label="药品分类" prop="category">
+          <el-select v-model="drugForm.category" placeholder="请选择分类" filterable allow-create default-first-option style="width: 100%">
+            <el-option v-for="item in drugCategories" :key="item" :label="item" :value="item" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="单位" prop="unit">
           <el-select v-model="drugForm.unit" placeholder="请选择单位" filterable allow-create style="width: 100%">
             <el-option label="盒" value="盒" />
@@ -465,16 +583,38 @@ const dispenseQuery = reactive({
   status: "",
 });
 const prescriptionList = ref([]);
+const prescriptionPage = reactive({
+  page: 1,
+  size: 10,
+});
 
 const reviewDialogVisible = ref(false);
 const currentPrescription = ref(null);
+const paymentDialogVisible = ref(false);
+const rechargeDialogVisible = ref(false);
+const paymentInfo = ref(null);
+const paymentPrescription = ref(null);
+const payingPrescription = ref(false);
+const rechargingPatient = ref(false);
+const rechargeForm = reactive({ amount: 0 });
+
+const pagedPrescriptionList = computed(() => {
+  const start = (prescriptionPage.page - 1) * prescriptionPage.size;
+  return prescriptionList.value.slice(start, start + prescriptionPage.size);
+});
+
+const prescriptionIndex = (index) =>
+  (prescriptionPage.page - 1) * prescriptionPage.size + index + 1;
 
 const prescriptionStatus = (row) => {
   if (row.auditStatus === "REJECTED") return "已退回";
   if (row.dispenseStatus === "DONE") return "已发药";
   if (row.auditStatus === "APPROVED" && row.paid === "Y") return "待发药";
+  if (row.auditStatus === "APPROVED") return "待缴费";
   return "待审核";
 };
+
+const formatMoney = (value) => Number(value || 0).toFixed(2);
 
 const parseItems = (text) => {
   if (!text) return [];
@@ -489,17 +629,34 @@ const parseItems = (text) => {
 const fetchPrescriptions = async () => {
   loadingDispense.value = true;
   try {
-    const res = await request.get("/api/doctors/prescriptions", {
-      params: { page: 1, size: 20 },
+    const firstPage = await request.get("/api/doctors/prescriptions", {
+      params: { page: 1, size: 50 },
     });
-    prescriptionList.value = (res.records || [])
+    const pageSize = firstPage.size || 50;
+    const totalPages = Math.max(Math.ceil((firstPage.total || 0) / pageSize), 1);
+    const restPages = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, index) =>
+        request.get("/api/doctors/prescriptions", {
+          params: { page: index + 2, size: pageSize },
+        }),
+      ),
+    );
+    const records = [
+      ...(firstPage.records || []),
+      ...restPages.flatMap((pageData) => pageData.records || []),
+    ];
+    prescriptionList.value = records
       .map((item) => ({
         id: item.id,
         prescriptionNo: `RX${item.id}`,
-        patientName: `患者#${item.patientId}`,
-        doctorName: `医生#${item.doctorId}`,
-        department: "--",
+        patientName: item.patientName || `患者#${item.patientId}`,
+        doctorName: item.doctorName || `医生#${item.doctorId}`,
+        department: item.department || "--",
         amount: Number(item.totalAmount || 0),
+        patientId: item.patientId,
+        paid: item.paid,
+        auditStatus: item.auditStatus,
+        dispenseStatus: item.dispenseStatus,
         status: prescriptionStatus(item),
         createTime: item.createdAt || "",
         items: parseItems(item.drugItems),
@@ -516,6 +673,7 @@ const fetchPrescriptions = async () => {
           : true;
         return noMatched && nameMatched && statusMatched;
       });
+    prescriptionPage.page = 1;
   } finally {
     loadingDispense.value = false;
   }
@@ -524,6 +682,7 @@ const fetchPrescriptions = async () => {
 const getPrescriptionStatusType = (status) => {
   const map = {
     待审核: "warning",
+    待缴费: "danger",
     待发药: "primary",
     已发药: "success",
     已退回: "info",
@@ -535,6 +694,7 @@ const resetDispenseQuery = () => {
   dispenseQuery.prescriptionNo = "";
   dispenseQuery.patientName = "";
   dispenseQuery.status = "";
+  prescriptionPage.page = 1;
   fetchPrescriptions();
 };
 
@@ -555,42 +715,115 @@ const submitReview = async (isPass) => {
     { params: { approved: isPass } },
   );
   if (isPass) {
+    const nextStatus = currentPrescription.value.paid === "Y" ? "待发药" : "待缴费";
     ElMessage.success(
-      `处方 ${currentPrescription.value.prescriptionNo} 审核通过，流转至待发药`,
+      currentPrescription.value.paid === "Y"
+        ? `处方 ${currentPrescription.value.prescriptionNo} 审核通过，可直接发药`
+        : `处方 ${currentPrescription.value.prescriptionNo} 审核通过，请先确认缴费`,
     );
-    currentPrescription.value.status = "待发药";
+    currentPrescription.value.auditStatus = "APPROVED";
+    currentPrescription.value.status = nextStatus;
   } else {
     ElMessage.warning(
       `处方 ${currentPrescription.value.prescriptionNo} 已驳回`,
     );
+    currentPrescription.value.auditStatus = "REJECTED";
     currentPrescription.value.status = "已退回";
   }
   reviewDialogVisible.value = false;
 };
 
-const handleDispense = (row) => {
-  ElMessageBox.confirm(
-    `确认对患者 ${row.patientName} 的处方进行发药并扣减库存吗？`,
-    "发药确认",
-    {
-      confirmButtonText: "确认发药",
-      cancelButtonText: "取消",
-      type: "warning",
-    },
-  )
-    .then(async () => {
-      const firstItem = row.items?.[0];
-      if (!firstItem?.drugId) {
-        ElMessage.warning("处方明细缺少药品 ID，无法自动发药");
-        return;
-      }
-      await request.post(`/api/pharmacy/prescriptions/${row.id}/dispense`, null, {
-        params: { drugId: firstItem.drugId, quantity: firstItem.quantity || 1 },
-      });
-      ElMessage.success("发药成功，库存已自动扣减");
-      fetchPrescriptions();
-    })
-    .catch(() => {});
+const loadPaymentInfo = async (row) => {
+  paymentPrescription.value = row;
+  paymentInfo.value = await request.get(
+    `/api/pharmacy/prescriptions/${row.id}/payment-info`,
+  );
+  return paymentInfo.value;
+};
+
+const handleDispense = async (row) => {
+  const info = await loadPaymentInfo(row);
+  if (info.paid) {
+    await confirmDispense(row);
+    return;
+  }
+  if (!info.enough) {
+    const needAmount = Number(info.amount || 0) - Number(info.balance || 0);
+    rechargeForm.amount = Number(Math.max(needAmount, 0.01).toFixed(2));
+    rechargeDialogVisible.value = true;
+    return;
+  }
+  paymentDialogVisible.value = true;
+};
+
+const confirmDispense = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认对患者 ${row.patientName} 的处方进行发药并扣减库存吗？`,
+      "发药确认",
+      {
+        confirmButtonText: "确认发药",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
+    await performDispense(row);
+  } catch {
+    // 用户取消发药时不做额外提示。
+  }
+};
+
+const performDispense = async (row) => {
+  const firstItem = row.items?.[0];
+  if (!firstItem?.drugId) {
+    ElMessage.warning("处方明细缺少药品 ID，无法自动发药");
+    return;
+  }
+  await request.post(`/api/pharmacy/prescriptions/${row.id}/dispense`, null, {
+    params: { drugId: firstItem.drugId, quantity: firstItem.quantity || 1 },
+  });
+  ElMessage.success("发药成功，库存已自动扣减");
+  paymentDialogVisible.value = false;
+  rechargeDialogVisible.value = false;
+  fetchPrescriptions();
+};
+
+const confirmPaymentAndDispense = async () => {
+  if (!paymentPrescription.value) return;
+  payingPrescription.value = true;
+  try {
+    await request.post(
+      `/api/pharmacy/prescriptions/${paymentPrescription.value.id}/pay`,
+    );
+    paymentPrescription.value.status = "待发药";
+    paymentPrescription.value.paid = "Y";
+    await performDispense(paymentPrescription.value);
+  } finally {
+    payingPrescription.value = false;
+  }
+};
+
+const submitRecharge = async () => {
+  if (!paymentInfo.value?.patientId || rechargeForm.amount <= 0) {
+    ElMessage.warning("请输入正确的充值金额");
+    return;
+  }
+  rechargingPatient.value = true;
+  try {
+    await request.post(
+      `/api/pharmacy/patients/${paymentInfo.value.patientId}/recharge`,
+      null,
+      { params: { amount: rechargeForm.amount } },
+    );
+    ElMessage.success("充值成功，请确认是否继续缴费");
+    rechargeDialogVisible.value = false;
+    const refreshed = await loadPaymentInfo(paymentPrescription.value);
+    if (refreshed.enough) {
+      paymentDialogVisible.value = true;
+    }
+  } finally {
+    rechargingPatient.value = false;
+  }
 };
 
 // ================= 药品字典与库存 =================
@@ -598,10 +831,12 @@ const loadingInventory = ref(false);
 const inventoryQuery = reactive({
   drugCode: "",
   drugName: "",
+  category: "",
   showWarningOnly: false,
 });
 const drugList = ref([]);
 const inventoryPage = reactive({ page: 1, size: 10, total: 0 });
+const drugCategories = ["西药", "中成药", "中药饮片", "外用药", "注射剂", "耗材"];
 
 const inboundDialogVisible = ref(false);
 const drugDialogVisible = ref(false);
@@ -613,6 +848,7 @@ const drugForm = reactive({
   id: null,
   code: "",
   name: "",
+  category: "西药",
   unit: "盒",
   price: 0,
   stock: 0,
@@ -625,6 +861,7 @@ const drugRules = {
     { pattern: /^[A-Za-z0-9_-]{2,32}$/, message: "编码只能包含字母、数字、下划线或短横线", trigger: "blur" },
   ],
   name: [{ required: true, message: "请输入药品名称", trigger: "blur" }],
+  category: [{ required: true, message: "请选择药品分类", trigger: "change" }],
   unit: [{ required: true, message: "请选择单位", trigger: "change" }],
   price: [{ required: true, message: "请输入零售价", trigger: "blur" }],
   stock: [{ required: true, message: "请输入库存", trigger: "blur" }],
@@ -638,6 +875,7 @@ const fetchDrugs = async () => {
       params: {
         codeKeyword: inventoryQuery.drugCode || undefined,
         nameKeyword: inventoryQuery.drugName || undefined,
+        category: inventoryQuery.category || undefined,
         warningOnly: inventoryQuery.showWarningOnly || undefined,
         page: inventoryPage.page,
         size: inventoryPage.size,
@@ -648,7 +886,7 @@ const fetchDrugs = async () => {
         id: item.id,
         drugCode: item.code,
         drugName: item.name,
-        category: "--",
+        category: item.category || "未分类",
         specification: "--",
         unit: item.unit || "",
         price: Number(item.price || 0),
@@ -671,6 +909,7 @@ const resetDrugForm = () => {
     id: null,
     code: "",
     name: "",
+    category: "西药",
     unit: "盒",
     price: 0,
     stock: 0,
@@ -688,6 +927,7 @@ const handleEditDrug = (row) => {
     id: row.id,
     code: row.drugCode,
     name: row.drugName,
+    category: row.category === "未分类" ? "西药" : row.category || "西药",
     unit: row.unit || "盒",
     price: row.price || 0,
     stock: row.stock || 0,
@@ -703,6 +943,7 @@ const submitDrug = async () => {
     const payload = {
       code: drugForm.code,
       name: drugForm.name,
+      category: drugForm.category,
       unit: drugForm.unit,
       price: drugForm.price,
       stock: drugForm.stock,

@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/finance")
@@ -41,11 +42,11 @@ public class FinanceController {
 
     @GetMapping("/bills")
     @Operation(summary = "分页查询账单", description = "按状态、账单关键字或患者关键字查询收费记录。")
-    public ApiResponse<PageResponse<BillingRecord>> bills(@Parameter(description = "账单状态") @RequestParam(required = false) String status,
-                                                          @Parameter(description = "账单关键字") @RequestParam(required = false) String keyword,
-                                                          @Parameter(description = "患者关键字") @RequestParam(required = false) String patientKeyword,
-                                                          @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
-                                                          @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
+    public ApiResponse<PageResponse<Map<String, Object>>> bills(@Parameter(description = "账单状态") @RequestParam(required = false) String status,
+                                                                @Parameter(description = "账单关键字") @RequestParam(required = false) String keyword,
+                                                                @Parameter(description = "患者关键字") @RequestParam(required = false) String patientKeyword,
+                                                                @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
+                                                                @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
         return ApiResponse.ok(service.bills(status, keyword, patientKeyword, page, size));
     }
 
@@ -85,9 +86,9 @@ public class FinanceController {
 
     @GetMapping("/reports")
     @Operation(summary = "分页查询财务报表", description = "按日期查询财务流水和报表数据。")
-    public ApiResponse<PageResponse<FinancialTransaction>> reports(@Parameter(description = "日期，格式 yyyy-MM-dd") @RequestParam(required = false) String date,
-                                                                   @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
-                                                                   @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
+    public ApiResponse<PageResponse<Map<String, Object>>> reports(@Parameter(description = "日期，格式 yyyy-MM-dd") @RequestParam(required = false) String date,
+                                                                  @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
+                                                                  @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
         return ApiResponse.ok(service.report(date, page, size));
     }
 }

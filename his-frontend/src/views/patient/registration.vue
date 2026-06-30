@@ -449,7 +449,9 @@ const savePatient = async () => {
         : patientForm.birthday,
     phone: patientForm.phone,
   };
-  const saved = await request.post("/api/patients", payload);
+  const saved = patientForm.id
+    ? await request.put(`/api/patients/${patientForm.id}`, payload)
+    : await request.post("/api/patients", payload);
   applyPatient(saved);
   patientLocked.value = false;
   ElMessage.success("患者档案保存成功，请确认当前患者");

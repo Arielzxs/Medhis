@@ -8,8 +8,10 @@ import com.neusoft.his.dal.view.DoctorScheduleView;
 import com.neusoft.his.dal.mapper.DoctorProfileMapper;
 import com.neusoft.his.dal.mapper.DoctorScheduleMapper;
 import com.neusoft.his.dal.mapper.DoctorScheduleMapper.ScheduleRegistrationCount;
+import com.neusoft.his.dal.mapper.DrugCatalogMapper;
 import com.neusoft.his.dal.mapper.MedicalRecordMapper;
 import com.neusoft.his.dal.mapper.OutpatientRegistrationMapper;
+import com.neusoft.his.dal.mapper.PatientMapper;
 import com.neusoft.his.dal.mapper.PrescriptionMapper;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +37,8 @@ class DoctorWorkstationServicePaginationTest {
         PrescriptionMapper prescriptionMapper = mock(PrescriptionMapper.class);
         AuditService auditService = mock(AuditService.class);
         DoctorWorkstationService service = new DoctorWorkstationService(
-                doctorMapper, mock(DoctorLeaveApplicationMapper.class), scheduleMapper, recordMapper, registrationMapper, prescriptionMapper, auditService
+                doctorMapper, mock(DoctorLeaveApplicationMapper.class), scheduleMapper, recordMapper, registrationMapper,
+                mock(PatientMapper.class), prescriptionMapper, mock(DrugCatalogMapper.class), auditService
         );
 
         DoctorScheduleView view = new DoctorScheduleView(
@@ -69,7 +72,8 @@ class DoctorWorkstationServicePaginationTest {
         PrescriptionMapper prescriptionMapper = mock(PrescriptionMapper.class);
         AuditService auditService = mock(AuditService.class);
         DoctorWorkstationService service = new DoctorWorkstationService(
-                doctorMapper, mock(DoctorLeaveApplicationMapper.class), scheduleMapper, recordMapper, registrationMapper, prescriptionMapper, auditService
+                doctorMapper, mock(DoctorLeaveApplicationMapper.class), scheduleMapper, recordMapper, registrationMapper,
+                mock(PatientMapper.class), prescriptionMapper, mock(DrugCatalogMapper.class), auditService
         );
 
         when(scheduleMapper.selectSchedulePage(any(Page.class), isNull(), isNull(), isNull(), eq(false)))

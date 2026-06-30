@@ -40,7 +40,7 @@
           </el-form-item>
         </el-form>
 
-        <el-table :data="adminLeaveRows" border stripe style="width: 100%" v-loading="loadingLeaves">
+        <el-table :data="pagedAdminLeaveRows" border stripe style="width: 100%" v-loading="loadingLeaves">
           <el-table-column prop="doctorName" label="医生" align="center" width="120" />
           <el-table-column prop="startTime" label="开始时间" align="center" width="180" />
           <el-table-column prop="endTime" label="结束时间" align="center" width="180" />
@@ -66,6 +66,16 @@
             </template>
           </el-table-column>
         </el-table>
+        <div class="table-pagination">
+          <el-pagination
+            v-model:current-page="adminLeavePage.page"
+            v-model:page-size="adminLeavePage.size"
+            :page-sizes="[10, 20, 50]"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="adminLeaveRows.length"
+          />
+        </div>
       </template>
 
       <template v-else>
@@ -76,7 +86,7 @@
           </el-tag>
         </div>
 
-        <el-table :data="leaveApplications" border stripe style="width: 100%" v-loading="loadingLeaves">
+        <el-table :data="pagedLeaveApplications" border stripe style="width: 100%" v-loading="loadingLeaves">
           <el-table-column prop="startTime" label="开始时间" align="center" width="180" />
           <el-table-column prop="endTime" label="结束时间" align="center" width="180" />
           <el-table-column prop="reason" label="原因" header-align="center" min-width="180" />
@@ -100,6 +110,16 @@
             </template>
           </el-table-column>
         </el-table>
+        <div class="table-pagination">
+          <el-pagination
+            v-model:current-page="myLeavePage.page"
+            v-model:page-size="myLeavePage.size"
+            :page-sizes="[10, 20, 50]"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="leaveApplications.length"
+          />
+        </div>
       </template>
     </el-card>
 
@@ -174,6 +194,14 @@ const adminLeaveFormRef = ref();
 const doctorOptions = ref([]);
 const adminLeaves = ref([]);
 const leaveApplications = ref([]);
+const adminLeavePage = reactive({
+  page: 1,
+  size: 10,
+});
+const myLeavePage = reactive({
+  page: 1,
+  size: 10,
+});
 
 const myProfile = reactive({
   attendanceStatus: "",
@@ -220,6 +248,16 @@ const adminLeaveRows = computed(() =>
   })),
 );
 
+const pagedAdminLeaveRows = computed(() => {
+  const start = (adminLeavePage.page - 1) * adminLeavePage.size;
+  return adminLeaveRows.value.slice(start, start + adminLeavePage.size);
+});
+
+const pagedLeaveApplications = computed(() => {
+  const start = (myLeavePage.page - 1) * myLeavePage.size;
+  return leaveApplications.value.slice(start, start + myLeavePage.size);
+});
+
 const fetchDoctors = async () => {
   const data = await request.get("/api/doctors/profiles");
   doctorOptions.value = data || [];
@@ -238,6 +276,7 @@ const fetchAdminLeaves = async () => {
       },
     });
     adminLeaves.value = data || [];
+    adminLeavePage.page = 1;
   } finally {
     loadingLeaves.value = false;
   }
@@ -252,6 +291,7 @@ const fetchMyLeaves = async () => {
   loadingLeaves.value = true;
   try {
     leaveApplications.value = (await request.get("/api/doctors/me/leaves")) || [];
+    myLeavePage.page = 1;
   } finally {
     loadingLeaves.value = false;
   }
@@ -261,6 +301,7 @@ const resetAdminLeaveQuery = () => {
   adminLeaveQuery.doctorId = null;
   adminLeaveQuery.status = "";
   adminLeaveQuery.range = [];
+  adminLeavePage.page = 1;
   fetchAdminLeaves();
 };
 
@@ -430,5 +471,11 @@ onMounted(async () => {
 
 .text-muted {
   color: #a8abb2;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 </style>

@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 public class DrugCatalog extends BaseEntity {
     private String code;
     private String name;
+    private String category;
     private String unit;
     private BigDecimal price;
     private Integer stock;

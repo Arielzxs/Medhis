@@ -105,6 +105,15 @@ public class PatientController {
                                                                                   @Parameter(description = "医生档案 ID") @RequestParam(required = false) Long doctorId,
                                                                                   @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") long page,
                                                                                   @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") long size) {
+        SecurityUser user = SecurityUserHolder.get();
+        if (user != null
+                && user.roles() != null
+                && user.roles().contains(RoleCode.DOCTOR)
+                && !user.roles().contains(RoleCode.ADMIN)
+                && !user.roles().contains(RoleCode.REGISTRAR)
+                && !user.roles().contains(RoleCode.FINANCE)) {
+            return ApiResponse.ok(patientService.doctorRegistrations(user.userId(), status, page, size));
+        }
         return ApiResponse.ok(patientService.registrations(id, status, doctorId, page, size));
     }
 

@@ -33,7 +33,7 @@
       </el-row>
 
       <el-table
-        :data="tableData"
+        :data="pagedTableData"
         border
         stripe
         style="width: 100%; margin-top: 20px"
@@ -54,12 +54,22 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="table-pagination">
+        <el-pagination
+          v-model:current-page="pageState.page"
+          v-model:page-size="pageState.size"
+          :page-sizes="[10, 20, 50]"
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="tableData.length"
+        />
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from "vue";
+import { ref, reactive, computed, onMounted, nextTick } from "vue";
 import { ElMessage } from "element-plus";
 import * as echarts from "echarts";
 import request from "../../utils/request";
@@ -68,6 +78,15 @@ const queryParams = reactive({ dateRange: null });
 const lineChartRef = ref(null);
 const pieChartRef = ref(null);
 const tableData = ref([]);
+const pageState = reactive({
+  page: 1,
+  size: 10,
+});
+
+const pagedTableData = computed(() => {
+  const start = (pageState.page - 1) * pageState.size;
+  return tableData.value.slice(start, start + pageState.size);
+});
 
 let lineChart;
 let pieChart;
@@ -150,6 +169,7 @@ const handleSearch = async () => {
   tableData.value = [...grouped.values()].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
+  pageState.page = 1;
   if (lineChart && pieChart) updateCharts();
 };
 
@@ -199,5 +219,11 @@ onMounted(() => {
   padding: 15px;
   border: 1px solid #ebeef5;
   border-radius: 4px;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

@@ -33,7 +33,7 @@
         </div>
 
         <el-table
-          :data="profiles"
+          :data="pagedProfiles"
           border
           stripe
           v-loading="loading"
@@ -57,6 +57,16 @@
             </template>
           </el-table-column>
         </el-table>
+        <div class="table-pagination">
+          <el-pagination
+            v-model:current-page="profilePage.page"
+            v-model:page-size="profilePage.size"
+            :page-sizes="[10, 20, 50]"
+            background
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="profiles.length"
+          />
+        </div>
       </template>
 
       <template v-else>
@@ -156,11 +166,20 @@ const saving = ref(false);
 const dialogVisible = ref(false);
 const formRef = ref();
 const profiles = ref([]);
+const profilePage = reactive({
+  page: 1,
+  size: 10,
+});
 
 const queryParams = reactive({
   department: "",
   attendanceStatus: "",
   keyword: "",
+});
+
+const pagedProfiles = computed(() => {
+  const start = (profilePage.page - 1) * profilePage.size;
+  return profiles.value.slice(start, start + profilePage.size);
 });
 
 const form = reactive({
@@ -220,6 +239,7 @@ const fetchProfiles = async () => {
       },
     });
     profiles.value = data || [];
+    profilePage.page = 1;
   } finally {
     loading.value = false;
   }
@@ -239,6 +259,7 @@ const resetQuery = () => {
   queryParams.department = "";
   queryParams.attendanceStatus = "";
   queryParams.keyword = "";
+  profilePage.page = 1;
   fetchProfiles();
 };
 
@@ -349,5 +370,11 @@ onMounted(() => {
   justify-content: flex-end;
   padding-top: 18px;
   border-top: 1px solid #ebeef5;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 </style>

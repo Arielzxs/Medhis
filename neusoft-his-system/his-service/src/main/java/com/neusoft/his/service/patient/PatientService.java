@@ -84,9 +84,7 @@ public class PatientService {
                 if (StringUtils.isBlank(patient.getCurrentStatus())) {
                     patient.setCurrentStatus(existing.getCurrentStatus());
                 }
-                if (patient.getBalance() == null) {
-                    patient.setBalance(existing.getBalance());
-                }
+                patient.setBalance(existing.getBalance());
                 patientMapper.updateById(patient);
                 auditService.log("PATIENT_UPDATE", "患者更新(按身份证号): " + patient.getName() + ", 身份证: " + patient.getIdCard());
                 return patient;
@@ -129,9 +127,7 @@ public class PatientService {
         if (StringUtils.isBlank(patient.getCurrentStatus())) {
             patient.setCurrentStatus(old.getCurrentStatus());
         }
-        if (patient.getBalance() == null) {
-            patient.setBalance(old.getBalance());
-        }
+        patient.setBalance(old.getBalance());
         patient.setCreatedAt(old.getCreatedAt());
         patient.setUpdatedAt(LocalDateTime.now());
         patientMapper.updateById(patient);

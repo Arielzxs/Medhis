@@ -22,7 +22,7 @@
       </div>
 
       <el-table
-        :data="departments"
+        :data="pagedDepartments"
         border
         stripe
         v-loading="loading"
@@ -58,6 +58,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pagination-box">
+        <el-pagination
+          v-model:current-page="pageState.page"
+          v-model:page-size="pageState.size"
+          :page-sizes="[10, 20, 50]"
+          background
+          layout="total, sizes, prev, pager, next"
+          :total="departments.length"
+          :disabled="loading"
+          @size-change="handlePageSizeChange"
+        />
+      </div>
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="form.id ? '编辑科室' : '新增科室'" width="560px" destroy-on-close>
@@ -93,7 +106,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import request from "../../utils/request";
 
@@ -102,6 +115,10 @@ const saving = ref(false);
 const dialogVisible = ref(false);
 const formRef = ref();
 const departments = ref([]);
+const pageState = reactive({
+  page: 1,
+  size: 10,
+});
 
 const queryParams = reactive({
   keyword: "",
@@ -120,6 +137,11 @@ const form = reactive({
 const rules = {
   name: [{ required: true, message: "请输入科室名称", trigger: "blur" }],
 };
+
+const pagedDepartments = computed(() => {
+  const start = (pageState.page - 1) * pageState.size;
+  return departments.value.slice(start, start + pageState.size);
+});
 
 const resetForm = () => {
   Object.assign(form, {
@@ -153,6 +175,10 @@ const fetchDepartments = async () => {
         keyword: queryParams.keyword || undefined,
       },
     });
+    const maxPage = Math.max(Math.ceil(departments.value.length / pageState.size), 1);
+    if (pageState.page > maxPage) {
+      pageState.page = maxPage;
+    }
   } finally {
     loading.value = false;
   }
@@ -160,7 +186,12 @@ const fetchDepartments = async () => {
 
 const resetQuery = () => {
   queryParams.keyword = "";
+  pageState.page = 1;
   fetchDepartments();
+};
+
+const handlePageSizeChange = () => {
+  pageState.page = 1;
 };
 
 const openDialog = (row) => {
@@ -183,6 +214,7 @@ const submitDepartment = async () => {
     }
     ElMessage.success("科室已保存");
     dialogVisible.value = false;
+    pageState.page = 1;
     fetchDepartments();
   } finally {
     saving.value = false;
@@ -243,5 +275,11 @@ onMounted(fetchDepartments);
 
 .filter-box {
   margin-bottom: 20px;
+}
+
+.pagination-box {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 </style>
